@@ -367,27 +367,25 @@ a {
 
 .top-nav-row {
   display: flex;
-  height: 56px;
+  min-height: 56px;
   max-width: 1680px;
   align-items: center;
   gap: 12px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 8px 20px;
 }
 
+/* Fourteen modules outrun the bar well before the viewport does — at 150%
+   zoom on a 1080p screen there is room for ten. They wrap onto a second
+   line rather than sliding into a hidden scroller: a horizontal scrollbar
+   this row deliberately hides is an affordance nobody finds. */
 .top-nav-tabs {
   display: flex;
   min-width: 0;
   flex: 1;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-
-.top-nav-tabs::-webkit-scrollbar {
-  height: 0;
 }
 
 .nav-tab {
