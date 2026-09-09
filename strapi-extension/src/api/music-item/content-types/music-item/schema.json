@@ -1,0 +1,46 @@
+{
+  "kind": "collectionType",
+  "collectionName": "music_items",
+  "info": {
+    "singularName": "music-item",
+    "pluralName": "music-items",
+    "displayName": "music"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "file": {
+      "type": "text"
+    },
+    "filetype": {
+      "type": "string"
+    },
+    "lyrics": {
+      "type": "text"
+    },
+    "note": {
+      "type": "text"
+    },
+    "ref": {
+      "type": "text"
+    },
+    "category": {
+      "type": "string"
+    },
+    "hash": {
+      "type": "text"
+    },
+    "language": {
+      "type": "string"
+    },
+    "cover": {
+      "type": "text"
+    }
+  }
+}

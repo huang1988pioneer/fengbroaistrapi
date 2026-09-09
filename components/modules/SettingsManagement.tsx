@@ -1,0 +1,1953 @@
+import StrapiConnectionSettings from "./StrapiConnectionSettings";
+import { apiFetch } from "@/lib/strapi/api";
+
+import { useState, useEffect, useMemo, useRef, useCallback, type ChangeEvent } from "react";
+import { Settings, Moon, Sun, Bell, Shield, Database, Palette, Table2, Loader2, Plus, X, CheckCircle2, Key, HardDrive, Trash2, Mail, Send, Mic, Activity, AlertTriangle, Info, Download, Upload } from "lucide-react";
+import { Button, DataCard, SectionHeader } from "@/components/ui";
+import { CollapsibleSettingsCard } from "@/components/ui/collapsible-settings-card";
+import { Input } from "@/components/ui/input";
+import { useTheme } from "@/components/providers/theme-provider";
+import { useVoicePreferences } from "@/hooks/useVoicePreferences";
+import { useNotificationPreferences } from "@/hooks/useNotificationPreferences";
+import { clearAllCaches, getAppwriteConfig, getExportFilename } from "@/lib/utils";
+import { notifyAppwriteConfigChanged } from "@/hooks/useAppwriteSetup";
+import { useWebPush } from "@/hooks/useWebPush";
+import { formatFileSize } from "@/lib/formatters";
+import {
+  RESEND_SLOT_COUNT,
+  RESEND_DEFAULT_VISIBLE_SLOT_COUNT,
+  RESEND_VISIBLE_SLOT_OPTIONS,
+  RESEND_DEFAULT_FROM,
+  getResendSlotFields,
+  createEmptyResendConfig,
+} from "@/lib/notifications/resendConfig";
+import type { NotificationSettingSlot } from "@/lib/notifications/notificationSettings";
+import {
+  buildResendSettingsCsv,
+  parseResendSettingsCsv,
+  mergeResendSlots,
+} from "@/lib/notifications/resendSettingsCsv";
+import {
+  runNotificationSelfCheck,
+  type SelfCheckReport,
+  type CheckStatus,
+} from "@/lib/notifications/selfCheck";
+import { API_ENDPOINTS } from "@/lib/constants";
+import { ADDITIVE_SETUP_TABLES } from "@/lib/managementRecords";
+import { fetchApi } from "@/hooks/useApi";
+import packageJson from "@/package.json";
+import { MenuBackupSettings } from "@/components/modules/MenuBackupSettings";
+
+interface ResendSettingsResponse {
+  hasPassword: boolean;
+  fromEmail: string;
+  slots: { apiKey: string; toEmail: string }[];
+}
+
+interface CollectionStats {
+  name: string;
+  columnCount: number;
+  documentCount: number;
+  collectionId?: string;
+  error?: boolean;
+  schemaMismatch?: boolean;
+  schemaDetails?: {
+    toAdd: any[];
+    toUpdate: any[];
+    conflicts: any[];
+  };
+}
+
+interface DatabaseStats {
+  totalColumns: number;
+  totalCollections: number;
+  collections: CollectionStats[];
+  databaseId: string;
+}
+
+interface CreateProgress {
+  tableName: string;
+  action: "create";
+  totalColumns: number;
+  currentColumn: number;
+  percent: number;
+  currentAttribute: string;
+  message: string;
+  isComplete: boolean;
+  isError: boolean;
+  collectionId?: string;
+}
+
+export default function SettingsManagement() {
+  const { theme, setTheme } = useTheme();
+  const { preferences: voicePreferences, updatePreferences: updateVoicePreferences } = useVoicePreferences();
+  const { preferences: notificationPreferences, updatePreferences: updateNotificationPreferences } = useNotificationPreferences();
+  const {
+    notificationPermission,
+    pushSubscribed,
+    pushLoading,
+    enablePush,
+    disablePush,
+  } = useWebPush({
+    envVapidPublicKey: import.meta.env.VITE_VAPID_PUBLIC_KEY,
+  });
+  const [dbStats, setDbStats] = useState<DatabaseStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState<string | null>(null);
+  const [progress, setProgress] = useState<CreateProgress | null>(null);
+  const [recentlyCreated, setRecentlyCreated] = useState<Set<string>>(new Set()); // Track recently created tables
+  const [appwriteConfig, setAppwriteConfig] = useState({
+    nickname: '',
+    endpoint: '',
+    projectId: '',
+    databaseId: '',
+    bucketId: '',
+    apiKey: ''
+  });
+  const [configSaved, setConfigSaved] = useState(false);
+  const [pushConfig, setPushConfig] = useState({
+    publicKey: ''
+  });
+  const [resendConfig, setResendConfig] = useState<Record<string, string>>(createEmptyResendConfig);
+  const [resendVisibleSlotCount, setResendVisibleSlotCount] = useState(RESEND_DEFAULT_VISIBLE_SLOT_COUNT);
+  const [resendTestLoading, setResendTestLoading] = useState(false);
+  const resendCsvInputRef = useRef<HTMLInputElement>(null);
+  const [resendImportPreview, setResendImportPreview] = useState<NotificationSettingSlot[] | null>(null);
+  const [resendSettingsLoading, setResendSettingsLoading] = useState(false);
+  const [resendPassword, setResendPassword] = useState("");
+  const [resendUnlocked, setResendUnlocked] = useState(false);
+  const [resendHasPassword, setResendHasPassword] = useState(false);
+  const [resendSaving, setResendSaving] = useState(false);
+  const [resendUnlocking, setResendUnlocking] = useState(false);
+  const [selfCheckLoading, setSelfCheckLoading] = useState(false);
+  const [selfCheckReport, setSelfCheckReport] = useState<SelfCheckReport | null>(null);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkIsUpdate, setBulkIsUpdate] = useState(false);
+  const [bulkQueue, setBulkQueue] = useState<string[]>([]);
+  const bulkQueueRef = useRef<string[]>([]);
+  const bulkModeRef = useRef(false);
+  const bulkIsUpdateRef = useRef(false);
+  const [storageStats, setStorageStats] = useState<any>(null);
+  const [cleaningStorage, setCleaningStorage] = useState(false);
+  const [scanProgress, setScanProgress] = useState<{
+    stage: string;
+    current: number;
+    total: number;
+    message: string;
+  } | null>(null);
+  const [deleteProgress, setDeleteProgress] = useState<{
+    stage: string;
+    current: number;
+    total: number;
+    message: string;
+    deleted?: number;
+    failed?: number;
+  } | null>(null);
+  
+  const configuredResendSlotCount = useMemo(() => {
+    return Array.from({ length: RESEND_SLOT_COUNT }, (_, index) => {
+      const fields = getResendSlotFields(index + 1);
+      const apiKey = (resendConfig[fields.apiKey] || '').trim();
+      const toEmail = (resendConfig[fields.toEmail] || '').trim();
+      return apiKey && toEmail;
+    }).filter(Boolean).length;
+  }, [resendConfig]);
+
+  // 計算待處理表格數量
+  const missingTablesCount = useMemo(() =>
+    dbStats?.collections?.filter(col => col.error).length || 0,
+    [dbStats]
+  );
+
+  const mismatchTablesCount = useMemo(() =>
+    dbStats?.collections?.filter(col => col.schemaMismatch && !col.error && !recentlyCreated.has(col.name)).length || 0,
+    [dbStats, recentlyCreated]
+  );
+
+
+  // 將 21 組 RESEND_API_KEY / 通知收件 Email 依槽位寫回表單 state
+  const applyResendSlots = useCallback((slots: NotificationSettingSlot[], fromEmail: string) => {
+    const nextConfig: Record<string, string> = {};
+    for (let slot = 1; slot <= RESEND_SLOT_COUNT; slot++) {
+      const fields = getResendSlotFields(slot);
+      nextConfig[fields.apiKey] = "";
+      nextConfig[fields.toEmail] = "";
+    }
+    slots.forEach((slotItem, index) => {
+      if (index >= RESEND_SLOT_COUNT) return;
+      const fields = getResendSlotFields(index + 1);
+      nextConfig[fields.apiKey] = slotItem.apiKey || "";
+      nextConfig[fields.toEmail] = slotItem.toEmail || "";
+    });
+    nextConfig.fromEmail = fromEmail || RESEND_DEFAULT_FROM;
+    setResendConfig(nextConfig);
+  }, []);
+
+  // 從 notificationsettings Table（Appwrite API）載入設定（含密碼是否已建立的資訊）
+  const loadResendSettings = useCallback(async () => {
+    setResendSettingsLoading(true);
+    try {
+      const payload = await fetchApi<ResendSettingsResponse>(API_ENDPOINTS.NOTIFICATION_SETTINGS);
+      setResendHasPassword(Boolean(payload.hasPassword));
+      setResendUnlocked(false);
+      setResendPassword("");
+      applyResendSlots(payload.slots, payload.fromEmail || RESEND_DEFAULT_FROM);
+    } catch (error) {
+      console.error("載入 Resend 設定失敗:", error);
+      alert(`❌ 載入 Resend 設定失敗：${error instanceof Error ? error.message : "未知錯誤"}`);
+    } finally {
+      setResendSettingsLoading(false);
+    }
+  }, [applyResendSlots]);
+
+  // 載入 Strapi 設定
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = {
+      nickname: localStorage.getItem('APPWRITE_ACCOUNT_NICKNAME') || '',
+      endpoint: localStorage.getItem('NEXT_PUBLIC_APPWRITE_ENDPOINT') || '',
+      projectId: localStorage.getItem('NEXT_PUBLIC_APPWRITE_PROJECT_ID') || '',
+      databaseId: localStorage.getItem('APPWRITE_DATABASE_ID') || '',
+      bucketId: localStorage.getItem('APPWRITE_BUCKET_ID') || '',
+      apiKey: localStorage.getItem('APPWRITE_API_KEY') || ''
+    };
+    setAppwriteConfig(saved);
+    setPushConfig({
+      publicKey: localStorage.getItem('NEXT_PUBLIC_VAPID_PUBLIC_KEY') || import.meta.env.VITE_VAPID_PUBLIC_KEY || ''
+    });
+    loadResendSettings();
+  }, [loadResendSettings]);
+
+  const handleSaveConfig = () => {
+    if (typeof window === 'undefined') return;
+    
+    // 驗證所有欄位已填寫
+    if (!appwriteConfig.endpoint || !appwriteConfig.projectId || !appwriteConfig.databaseId || !appwriteConfig.bucketId || !appwriteConfig.apiKey) {
+      alert('⚠️ 請填寫所有 Strapi 設定欄位');
+      return;
+    }
+
+    // 儲存新設定
+    if (appwriteConfig.nickname) {
+      localStorage.setItem('APPWRITE_ACCOUNT_NICKNAME', appwriteConfig.nickname);
+    } else {
+      localStorage.removeItem('APPWRITE_ACCOUNT_NICKNAME');
+    }
+    localStorage.setItem('NEXT_PUBLIC_APPWRITE_ENDPOINT', appwriteConfig.endpoint);
+    localStorage.setItem('NEXT_PUBLIC_APPWRITE_PROJECT_ID', appwriteConfig.projectId);
+    localStorage.setItem('APPWRITE_DATABASE_ID', appwriteConfig.databaseId);
+    localStorage.setItem('APPWRITE_BUCKET_ID', appwriteConfig.bucketId);
+    localStorage.setItem('APPWRITE_API_KEY', appwriteConfig.apiKey);
+    
+    // 設定標記：已經儲存過自定義配置，不再使用 .env
+    localStorage.setItem('appwrite_custom_config_saved', 'true');
+    
+    // 清除所有快取
+    clearAllCaches();
+    notifyAppwriteConfigChanged();
+    
+    setConfigSaved(true);
+    
+    // 顯示提示並自動重新整理頁面
+    alert('✅ Strapi 帳號設定已儲存！\n所有快取已清除。\n\n頁面將自動重新載入以套用新設定。');
+    
+    // 延遲 500ms 後自動重新整理頁面
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
+  };
+
+  const handleSavePushConfig = () => {
+    if (typeof window === 'undefined') return;
+    const publicKey = pushConfig.publicKey.trim();
+    if (publicKey) {
+      localStorage.setItem('NEXT_PUBLIC_VAPID_PUBLIC_KEY', publicKey);
+    } else {
+      localStorage.removeItem('NEXT_PUBLIC_VAPID_PUBLIC_KEY');
+    }
+    alert('✅ 推播公鑰設定已儲存。\n重新整理後會套用新的推播設定。');
+    window.location.reload();
+  };
+
+  const handleNotificationSelfCheck = async (sendTestOsNotification = false) => {
+    setSelfCheckLoading(true);
+    try {
+      const report = await runNotificationSelfCheck({
+        includeServer: true,
+        sendTestOsNotification,
+        appwrite: {
+          endpoint: appwriteConfig.endpoint,
+          projectId: appwriteConfig.projectId,
+          databaseId: appwriteConfig.databaseId,
+          apiKey: appwriteConfig.apiKey,
+        },
+      });
+      setSelfCheckReport(report);
+    } catch (err) {
+      setSelfCheckReport({
+        checkedAt: new Date().toISOString(),
+        overall: "fail",
+        summary: { pass: 0, warn: 0, fail: 1, info: 0 },
+        items: [
+          {
+            id: "selfcheck.error",
+            channel: "client",
+            label: "自我檢測",
+            status: "fail",
+            detail: err instanceof Error ? err.message : "未知錯誤",
+          },
+        ],
+      });
+    } finally {
+      setSelfCheckLoading(false);
+    }
+  };
+
+  const selfCheckStatusClass = (status: CheckStatus) => {
+    if (status === "pass") return "text-green-600 dark:text-green-400";
+    if (status === "warn") return "text-amber-600 dark:text-amber-400";
+    if (status === "fail") return "text-red-600 dark:text-red-400";
+    return "text-sky-600 dark:text-sky-400";
+  };
+
+  const selfCheckStatusLabel = (status: CheckStatus) => {
+    if (status === "pass") return "通過";
+    if (status === "warn") return "警告";
+    if (status === "fail") return "失敗";
+    return "資訊";
+  };
+
+  // 驗證通知密碼並解鎖，載入明文 API Key
+  const handleUnlockResend = async () => {
+    if (typeof window === "undefined") return;
+    const password = resendPassword.trim();
+    if (!password) {
+      alert("請輸入通知密碼");
+      return;
+    }
+    setResendUnlocking(true);
+    try {
+      const payload = await fetchApi<ResendSettingsResponse>(API_ENDPOINTS.NOTIFICATION_SETTINGS, {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      });
+      setResendHasPassword(Boolean(payload.hasPassword));
+      setResendUnlocked(true);
+      applyResendSlots(payload.slots, payload.fromEmail || RESEND_DEFAULT_FROM);
+    } catch (error) {
+      setResendUnlocked(false);
+      alert(`❌ 驗證失敗：${error instanceof Error ? error.message : "未知錯誤"}`);
+    } finally {
+      setResendUnlocking(false);
+    }
+  };
+
+  // 從表單收集完整的槽位（含隱藏的），存回 notificationsettings
+  const collectResendSlots = (): NotificationSettingSlot[] => {
+    const slots: NotificationSettingSlot[] = [];
+    for (let slot = 1; slot <= RESEND_SLOT_COUNT; slot++) {
+      const fields = getResendSlotFields(slot);
+      const apiKey = (resendConfig[fields.apiKey] || "").trim();
+      const toEmail = (resendConfig[fields.toEmail] || "").trim();
+      if (apiKey && toEmail) slots.push({ apiKey, toEmail });
+    }
+    return slots;
+  };
+
+  const handleSaveResendConfig = async () => {
+    if (typeof window === "undefined") return;
+    const fromEmail = (resendConfig.fromEmail || "").trim() || RESEND_DEFAULT_FROM;
+
+    // 尚未建立通知密碼時，第一次儲存等於設定密碼並寫入設定
+    const password = resendPassword.trim();
+    if (resendHasPassword && !resendUnlocked) {
+      alert("請先輸入通知密碼並點擊「解鎖並載入金鑰」，再儲存設定。");
+      return;
+    }
+    if (resendHasPassword && !password) {
+      alert("請輸入通知密碼");
+      return;
+    }
+    if (!resendHasPassword && password.length < 4) {
+      alert("首次使用請設定至少 4 碼的通知密碼。");
+      return;
+    }
+
+    setResendSaving(true);
+    try {
+      const payload = await fetchApi<ResendSettingsResponse>(API_ENDPOINTS.NOTIFICATION_SETTINGS, {
+        method: "PUT",
+        body: JSON.stringify({
+          password: resendHasPassword ? password : "",
+          newPassword: resendHasPassword ? "" : password,
+          fromEmail,
+          slots: collectResendSlots(),
+        }),
+      });
+      setResendHasPassword(Boolean(payload.hasPassword));
+      setResendUnlocked(true);
+      applyResendSlots(payload.slots, payload.fromEmail || RESEND_DEFAULT_FROM);
+      alert("✅ Resend Email 通知設定已儲存（同步至 notificationsettings）。");
+    } catch (error) {
+      alert(`❌ 儲存失敗：${error instanceof Error ? error.message : "未知錯誤"}`);
+    } finally {
+      setResendSaving(false);
+    }
+  };
+
+  // 手動檢查今天是否應寄發 Email；若應寄發但今天還沒寄成就這裡補寄。同一天重複點不會重寄（Resend Idempotency-Key）。
+  const handleTestResendNotification = async () => {
+    // 檢查使用明文 API Key，需先解鎖（驗證通知密碼）
+    if (resendHasPassword && !resendUnlocked) {
+      alert('檢查/補寄到期 Email 會使用明文的 API Key，請先輸入通知密碼並點擊「解鎖並載入金鑰」。');
+      return;
+    }
+    const resendPayload: Record<string, string> = {};
+    const hasCompleteResendSlot = Array.from({ length: RESEND_SLOT_COUNT }, (_, index) => {
+      const fields = getResendSlotFields(index + 1);
+      const apiKey = (resendConfig[fields.apiKey] || '').trim();
+      const toEmail = (resendConfig[fields.toEmail] || '').trim();
+      resendPayload[fields.bodyApiKey] = apiKey;
+      resendPayload[fields.bodyToEmail] = toEmail;
+      return Boolean(apiKey && toEmail);
+    }).some(Boolean);
+    if (!hasCompleteResendSlot) {
+      alert('請至少填寫一組 RESEND API Key 與通知收件 Email');
+      return;
+    }
+
+    setResendTestLoading(true);
+    try {
+      const response = await apiFetch(API_ENDPOINTS.RESEND_EXPIRY_NOTIFY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...resendPayload,
+          resendFrom: resendConfig.fromEmail.trim() || RESEND_DEFAULT_FROM,
+          endpoint: appwriteConfig.endpoint,
+          projectId: appwriteConfig.projectId,
+          databaseId: appwriteConfig.databaseId,
+          appwriteApiKey: appwriteConfig.apiKey,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.error) throw new Error(result.error || 'Resend 檢查失敗');
+      alert(
+        result.sent
+          ? `✅ 今天應寄發的都已確認送達（訂閱 ${result.subscriptions}、食品 ${result.foods}）。若今天自動檢查已寄過，Resend 會自動回傳原結果不重寄；若還沒寄到，這次就是補寄。`
+          : '✅ 檢查完成：今天沒有剛好到期的項目（訂閱剛好前 1 天／食品剛好前 7 天），不需要寄信。'
+      );
+    } catch (error) {
+      alert(`❌ Resend 檢查/補寄失敗：${error instanceof Error ? error.message : '未知錯誤'}`);
+    } finally {
+      setResendTestLoading(false);
+    }
+  };
+
+  const handleBulkCreate = () => {
+    if (!dbStats?.collections) return;
+    const missingTables = dbStats.collections
+      .filter(col => col.error)
+      .map(col => col.name);
+    
+    if (missingTables.length === 0) {
+      alert("所有表格皆已存在。");
+      return;
+    }
+
+    if (!confirm(`確定要一次建立 ${missingTables.length} 個表格嗎？\n\n[${missingTables.join(', ')}]`)) {
+      return;
+    }
+
+    setBulkMode(true);
+    setBulkIsUpdate(false);
+    const queue = [...missingTables];
+    const first = queue.shift();
+    setBulkQueue(queue);
+    
+    // 同步更新 Ref 以確保 handleCreateTable 回呼能讀取到最新狀態
+    bulkModeRef.current = true;
+    bulkIsUpdateRef.current = false;
+    bulkQueueRef.current = queue;
+
+    if (first) handleCreateTable(first, false);
+  };
+
+  const handleBulkRebuild = () => {
+    if (!dbStats?.collections) return;
+    const mismatchTables = dbStats.collections
+      .filter(col => col.schemaMismatch && !col.error)
+      .map(col => col.name);
+    
+    if (mismatchTables.length === 0) {
+      alert("所有表格結構皆一致。");
+      return;
+    }
+
+    if (!confirm(`⚠️ 警告：一次重建 ${mismatchTables.length} 個表格將會刪除所有相關資料！
+
+[${mismatchTables.join(', ')}]
+
+確定要繼續嗎？`)) {
+      return;
+    }
+
+    setBulkMode(true);
+    setBulkIsUpdate(true);
+    const queue = [...mismatchTables];
+    const first = queue.shift();
+    setBulkQueue(queue);
+    
+    // 同步更新 Ref 以確保 handleCreateTable 回呼能讀取到最新狀態
+    bulkModeRef.current = true;
+    bulkIsUpdateRef.current = true;
+    bulkQueueRef.current = queue;
+
+    if (first) handleCreateTable(first, true);
+  };
+
+  const handleResetToDefault = () => {
+    if (typeof window === 'undefined') return;
+    
+    if (!confirm('確定要重置為預設值嗎？\n\n這將清除所有自定義 Appwrite 配置，恢復使用 .env 檔案的設定。')) {
+      return;
+    }
+    
+    // 清除所有 localStorage 中的 Appwrite 配置
+    localStorage.removeItem('APPWRITE_ACCOUNT_NICKNAME');
+    localStorage.removeItem('NEXT_PUBLIC_APPWRITE_ENDPOINT');
+    localStorage.removeItem('NEXT_PUBLIC_APPWRITE_PROJECT_ID');
+    localStorage.removeItem('APPWRITE_DATABASE_ID');
+    localStorage.removeItem('APPWRITE_BUCKET_ID');
+    localStorage.removeItem('APPWRITE_API_KEY');
+    localStorage.removeItem('NEXT_PUBLIC_VAPID_PUBLIC_KEY');
+    localStorage.removeItem('appwrite_custom_config_saved');
+    
+    // 清除所有快取
+    clearAllCaches();
+    notifyAppwriteConfigChanged();
+    
+    alert('✅ 已重置為預設值！\n現在將使用 .env 檔案的 Appwrite 配置。\n\n頁面將自動重新載入。');
+    
+    // 延遲 500ms 後自動重新整理頁面
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
+  };
+
+  const handleCopyEnvTemplate = () => {
+    const envTemplate = `# Appwrite Configuration
+NEXT_PUBLIC_APPWRITE_ENDPOINT=${appwriteConfig.endpoint}
+NEXT_PUBLIC_APPWRITE_PROJECT_ID=${appwriteConfig.projectId}
+APPWRITE_DATABASE_ID=${appwriteConfig.databaseId}
+APPWRITE_BUCKET_ID=${appwriteConfig.bucketId}
+APPWRITE_API_KEY=${appwriteConfig.apiKey}
+VAPID_PUBLIC_KEY=${pushConfig.publicKey}
+VAPID_PRIVATE_KEY=
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=${pushConfig.publicKey}
+${Array.from({ length: RESEND_SLOT_COUNT }, (_, index) => {
+  const fields = getResendSlotFields(index + 1);
+  return `${fields.envApiKey}=${resendConfig[fields.apiKey] || ''}\n${fields.envToEmail}=${resendConfig[fields.toEmail] || ''}`;
+}).join('\n')}
+RESEND_FROM_EMAIL=${resendConfig.fromEmail}`;
+    
+    navigator.clipboard.writeText(envTemplate).then(() => {
+      alert('✅ .env 設定已複製到剪貼簿！\n\n請執行以下步驟：\n1. 在專案根目錄建立或開啟 .env 檔案\n2. 貼上複製的內容\n3. 儲存檔案\n4. 重新啟動開發伺服器 (npm run dev)');
+    }).catch(() => {
+      alert('複製失敗，請手動複製以下內容：\n\n' + envTemplate);
+    });
+  };
+
+  // 將目前表單的 21 組 RESEND_API_KEY / 通知收件 Email 匯出成 CSV
+  const resendSlotsFromForm = (): NotificationSettingSlot[] => {
+    const slots: NotificationSettingSlot[] = [];
+    for (let slot = 1; slot <= RESEND_SLOT_COUNT; slot++) {
+      const fields = getResendSlotFields(slot);
+      const apiKey = (resendConfig[fields.apiKey] || '').trim();
+      const toEmail = (resendConfig[fields.toEmail] || '').trim();
+      if (apiKey && toEmail) slots.push({ apiKey, toEmail });
+    }
+    return slots;
+  };
+
+  const handleExportResendCsv = () => {
+    if (typeof window === 'undefined') return;
+    // 匯出包含明文 API Key，需先解鎖（驗證通知密碼）
+    if (resendHasPassword && !resendUnlocked) {
+      alert('匯出包含明文的 API Key，請先輸入通知密碼並點擊「解鎖並載入金鑰」。');
+      return;
+    }
+    const slots = resendSlotsFromForm();
+    if (slots.length === 0) {
+      alert('目前沒有已設定的 RESEND_API_KEY / 通知收件 Email 可匯出。');
+      return;
+    }
+    try {
+      const csv = buildResendSettingsCsv(slots);
+      const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = getExportFilename("resend-settings");
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      alert(`❌ 匯出 CSV 失敗：${error instanceof Error ? error.message : '未知錯誤'}`);
+    }
+  };
+
+  const handleResendCsvFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      alert("請選擇 CSV 檔案");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      const parsed = parseResendSettingsCsv(text);
+      if (parsed.errors.length > 0) {
+        alert(`⚠️ CSV 格式錯誤，無法匯入：\n\n${parsed.errors.join('\n')}`);
+        return;
+      }
+      if (parsed.slots.length === 0) {
+        alert('⚠️ CSV 中沒有可匯入的資料列。');
+        return;
+      }
+      setResendImportPreview(parsed.slots);
+    };
+    reader.onerror = () => alert("讀取 CSV 檔案失敗");
+    reader.readAsText(file, "UTF-8");
+  };
+
+  const handleConfirmResendImport = () => {
+    if (!resendImportPreview || resendImportPreview.length === 0) return;
+    // 匯入會覆寫現有槽位，需先解鎖（驗證通知密碼）才能以明文資料合併
+    if (resendHasPassword && !resendUnlocked) {
+      alert('匯入前請先輸入通知密碼並點擊「解鎖並載入金鑰」。');
+      return;
+    }
+    const current = resendSlotsFromForm();
+    const merged = mergeResendSlots(resendImportPreview, current);
+    applyResendSlots(merged.slots, resendConfig.fromEmail || RESEND_DEFAULT_FROM);
+    setResendImportPreview(null);
+    alert(`✅ 已合併 ${merged.slots.length} 組（新增 ${merged.added}、更新 ${merged.updated}、略過 ${merged.skipped}）。請按「儲存 Resend 設定」寫入 notificationsettings。`);
+  };
+
+  const fetchStats = () => {
+    // 添加 Appwrite 配置參數到 URL
+    const config = getAppwriteConfig();
+    const params = new URLSearchParams();
+    if (config.endpoint) params.set('_endpoint', config.endpoint);
+    if (config.projectId) params.set('_project', config.projectId);
+    if (config.databaseId) params.set('_database', config.databaseId);
+    if (config.apiKey) params.set('_key', config.apiKey);
+    
+    const url = `/api/database-stats?${params.toString()}`;
+    
+    apiFetch(url, { cache: "no-store" })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          console.error("Database stats error:", data.error);
+          if (String(data.error).includes('Bandwidth limit') || String(data.error).includes('bandwidth') || String(data.error).includes('exceeded')) {
+            alert('⚠️ Appwrite 頻寬超出限制\n\n無法取得資料庫狀態。\n請至 Appwrite Console → Organization → Billing 升級方案或調整預算上限。');
+          }
+        }
+        setDbStats(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch database stats:", err);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const handlePatchSchema = async (tableName: string) => {
+    if (!confirm(`要為「${tableName}」補上缺少的欄位嗎？這不會刪除現有資料。`)) return;
+
+    setCreating(tableName);
+    try {
+      const config = getAppwriteConfig();
+      const params = new URLSearchParams();
+      if (config.endpoint) params.set("_endpoint", config.endpoint);
+      if (config.projectId) params.set("_project", config.projectId);
+      if (config.databaseId) params.set("_database", config.databaseId);
+      if (config.apiKey) params.set("_key", config.apiKey);
+
+      const response = await apiFetch(`/api/update-schema?${params.toString()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableName }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.success === false) {
+        throw new Error(result.message || result.error || "補欄位失敗");
+      }
+      alert(`✅ ${result.message || `${tableName} 已補上缺少欄位`}`);
+      fetchStats();
+    } catch (error) {
+      alert(`❌ 補欄位失敗：${error instanceof Error ? error.message : "未知錯誤"}`);
+    } finally {
+      setCreating(null);
+    }
+  };
+
+  const handleCreateTable = async (tableName: string, isUpdate = false) => {
+    const additiveSetup = ADDITIVE_SETUP_TABLES.includes(tableName);
+    // 如果是更新操作且不在批次模式中，顯示警告
+    if (isUpdate && !additiveSetup && !bulkModeRef.current) {
+      const confirmed = confirm(
+        `⚠️ 警告：更新 ${tableName} 表結構需要重建表格\n\n` +
+        `這個操作將：\n` +
+        `1. 刪除現有表格\n` +
+        `2. 創建新的表格結構\n` +
+        `3. 所有資料將會遺失\n\n` +
+        `建議：請先在 Appwrite 控制台備份資料\n\n` +
+        `✅ 完成後請刷新頁面確認結果\n\n` +
+        `確定要繼續嗎？`
+      );
+      if (!confirmed) return;
+    }
+
+    setCreating(tableName);
+    setProgress({
+      tableName,
+      action: "create",
+      totalColumns: 0,
+      currentColumn: 0,
+      percent: 0,
+      currentAttribute: '',
+      message: '正在連線...',
+      isComplete: false,
+      isError: false
+    });
+
+    try {
+      // 添加 Appwrite 配置參數到 URL
+      const config = getAppwriteConfig();
+      const params = new URLSearchParams();
+      params.set('table', tableName);
+      if (config.endpoint) params.set('_endpoint', config.endpoint);
+      if (config.projectId) params.set('_project', config.projectId);
+      if (config.databaseId) params.set('_database', config.databaseId);
+      if (config.apiKey) params.set('_key', config.apiKey);
+      
+      const eventSource = new EventSource(`/api/create-table?${params.toString()}`);
+      
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        switch (data.type) {
+          case 'start':
+            setProgress(prev => prev ? {
+              ...prev,
+              totalColumns: data.totalColumns,
+              message: `開始建立 ${data.tableName} (${data.totalColumns} 欄位)`
+            } : null);
+            break;
+          case 'progress':
+            if (data.step === 'attribute') {
+              setProgress(prev => prev ? {
+                ...prev,
+                currentColumn: data.current,
+                percent: data.percent,
+                currentAttribute: data.attribute,
+                message: data.message
+              } : null);
+            } else {
+              setProgress(prev => prev ? {
+                ...prev,
+                message: data.message,
+                collectionId: data.collectionId
+              } : null);
+            }
+            break;
+          case 'complete':
+            setProgress(prev => prev ? {
+              ...prev,
+              percent: 100,
+              isComplete: true,
+              message: data.message,
+              collectionId: data.collectionId
+            } : null);
+            eventSource.close();
+            // Mark this table as recently created
+            setRecentlyCreated(prev => new Set(prev).add(tableName));
+            // Auto-remove from recently created after 10 seconds
+            setTimeout(() => {
+              setRecentlyCreated(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(tableName);
+                return newSet;
+              });
+            }, 10000);
+            clearAllCaches(); // 清除所有模組快取
+            
+            // 如果是在批次模式中，且還有後續表格，處理下一個而不重新整理
+            if (bulkModeRef.current && bulkQueueRef.current.length > 0) {
+              const nextQueue = [...bulkQueueRef.current];
+              const nextTable = nextQueue.shift();
+              setBulkQueue(nextQueue);
+              bulkQueueRef.current = nextQueue;
+              if (nextTable) {
+                setTimeout(() => {
+                  handleCreateTable(nextTable, bulkIsUpdateRef.current); 
+                }, 1000);
+                return;
+              }
+            }
+
+            // 批次或單一操作結束後的清理與確認
+            setTimeout(() => {
+              fetchStats(); // 重新載入資料庫統計
+              setCreating(null);
+              const wasInBulk = bulkModeRef.current; // 保存當前狀態
+              setBulkMode(false); // 重設批次模式
+              bulkModeRef.current = false;
+              
+              // 完成後自動刷新頁面以確保顯示最新狀態
+              setTimeout(() => {
+                const finishMsg = wasInBulk 
+                  ? `✅ 批次處理已全部完成！` 
+                  : `✅ ${tableName} 表格已成功處理！`;
+                
+                if (confirm(`${finishMsg}\n\n點擊「確定」自動刷新頁面以確認最終結果。`)) {
+                  window.location.reload();
+                }
+              }, 1000);
+            }, 2000); 
+            break;
+          case 'error':
+            setProgress(prev => prev ? {
+              ...prev,
+              isError: true,
+              message: `錯誤: ${data.message}`
+            } : null);
+            eventSource.close();
+            break;
+        }
+      };
+
+      eventSource.onerror = () => {
+        setProgress(prev => prev ? {
+          ...prev,
+          isError: true,
+          message: '連線失敗'
+        } : null);
+        eventSource.close();
+      };
+
+    } catch (err) {
+      setProgress(prev => prev ? {
+        ...prev,
+        isError: true,
+        message: `錯誤: ${err}`
+      } : null);
+    }
+  };
+
+  const closeProgressDialog = () => {
+    setProgress(null);
+    setCreating(null);
+    setBulkMode(false);
+    bulkModeRef.current = false;
+  };
+
+  const handleCountOrphanedFiles = async () => {
+    setCleaningStorage(true);
+    setScanProgress({ stage: '準備中', current: 0, total: 100, message: '正在連接到 Appwrite...' });
+    
+    try {
+      const config = getAppwriteConfig();
+      const params = new URLSearchParams();
+      if (config.endpoint) params.set('_endpoint', config.endpoint);
+      if (config.projectId) params.set('_project', config.projectId);
+      if (config.databaseId) params.set('_database', config.databaseId);
+      if (config.bucketId) params.set('_bucket', config.bucketId);
+      if (config.apiKey) params.set('_key', config.apiKey);
+      params.set('action', 'count');
+
+      // Simulate progress stages
+      setScanProgress({ stage: '步驟 1/3', current: 10, total: 100, message: '獲取 Storage 檔案列表...' });
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setScanProgress({ stage: '步驟 2/3', current: 40, total: 100, message: '掃描資料庫引用...' });
+      
+      const response = await apiFetch(`/api/storage-stats?${params.toString()}`);
+      
+      setScanProgress({ stage: '步驟 3/3', current: 70, total: 100, message: '比對檔案並分類...' });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || '統計失敗');
+      }
+
+      setScanProgress({ stage: '完成', current: 100, total: 100, message: '統計完成！' });
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setStorageStats(data);
+      // Statistics are now displayed in the UI below, no need for alert
+    } catch (error) {
+      setScanProgress({ stage: '錯誤', current: 0, total: 100, message: '統計失敗' });
+      alert('❗ 統計失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
+    } finally {
+      setCleaningStorage(false);
+      setTimeout(() => setScanProgress(null), 1000);
+    }
+  };
+
+  const handleDeleteOrphanedFiles = async () => {
+    if (!storageStats || storageStats.orphanedFiles === 0) {
+      alert('⚠️ 請先執行「統計多餘檔案」以確認數量！');
+      return;
+    }
+
+    const confirmed = confirm(
+      `⚠️ 警告：即將刪除 ${storageStats.orphanedFiles} 個多餘檔案！\n\n` +
+      `分類明細：\n` +
+      `- 圖片：${storageStats.orphanedByType?.images || 0} 個\n` +
+      `- 影片：${storageStats.orphanedByType?.videos || 0} 個\n` +
+      `- 音樂：${storageStats.orphanedByType?.music || 0} 個\n` +
+      `- 文件：${storageStats.orphanedByType?.documents || 0} 個\n` +
+      `- 播客：${storageStats.orphanedByType?.podcasts || 0} 個\n\n` +
+      `推估可釋放空間：${formatFileSize(storageStats.orphanedSize || 0)}\n\n` +
+      `這個操作不可逆轉！確定要繼續嗎？`
+    );
+
+    if (!confirmed) return;
+
+    setCleaningStorage(true);
+    setDeleteProgress({ 
+      stage: '準備刪除', 
+      current: 0, 
+      total: storageStats.orphanedFiles, 
+      message: '正在連接到 Appwrite...', 
+      deleted: 0, 
+      failed: 0 
+    });
+    
+    try {
+      const config = getAppwriteConfig();
+      const params = new URLSearchParams();
+      if (config.endpoint) params.set('_endpoint', config.endpoint);
+      if (config.projectId) params.set('_project', config.projectId);
+      if (config.databaseId) params.set('_database', config.databaseId);
+      if (config.bucketId) params.set('_bucket', config.bucketId);
+      if (config.apiKey) params.set('_key', config.apiKey);
+      params.set('action', 'delete');
+
+      setDeleteProgress({ 
+        stage: '刪除中', 
+        current: 0, 
+        total: storageStats.orphanedFiles, 
+        message: `正在刪除 0/${storageStats.orphanedFiles} 個檔案...`, 
+        deleted: 0, 
+        failed: 0 
+      });
+
+      const response = await apiFetch(`/api/storage-stats?${params.toString()}`, {
+        method: 'POST'
+      });
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || '刪除失敗');
+      }
+
+      setDeleteProgress({ 
+        stage: '完成', 
+        current: data.deletedCount, 
+        total: storageStats.orphanedFiles, 
+        message: `刪除完成！成功 ${data.deletedCount} 個，失敗 ${data.failedCount} 個`, 
+        deleted: data.deletedCount, 
+        failed: data.failedCount 
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      alert(`✅ 刪除完成！\n\n` +
+        `成功刪除：${data.deletedCount} 個檔案\n` +
+        `失敗：${data.failedCount} 個\n` +
+        `推估釋放空間：${formatFileSize(data.orphanedSize || 0)}`);
+      
+      setStorageStats(null);
+    } catch (error) {
+      setDeleteProgress({ 
+        stage: '錯誤', 
+        current: 0, 
+        total: storageStats.orphanedFiles, 
+        message: '刪除失敗', 
+        deleted: 0, 
+        failed: 0 
+      });
+      alert('❗ 刪除失敗：' + (error instanceof Error ? error.message : '未知錯誤'));
+    } finally {
+      setCleaningStorage(false);
+      setTimeout(() => setDeleteProgress(null), 1000);
+    }
+  };
+
+  return (
+    <div className="space-y-4 lg:space-y-6">
+      <SectionHeader
+        title="鋒兄設定"
+        subtitle="應用程式設定與偏好"
+        showAccountLabel={true}
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <StrapiConnectionSettings />
+        <CollapsibleSettingsCard
+          accent="bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
+          icon={<Palette size={20} />}
+          title={<h3 className="font-bold text-lg">主題設定</h3>}
+          subtitle="選擇您喜歡的介面主題"
+        >
+          <div className="flex gap-3">
+            <Button
+              variant={theme === "light" ? "default" : "outline"}
+              onClick={() => setTheme("light")}
+              className="flex items-center gap-2"
+            >
+              <Sun size={16} />
+              淺色
+            </Button>
+            <Button
+              variant={theme === "dark" ? "default" : "outline"}
+              onClick={() => setTheme("dark")}
+              className="flex items-center gap-2"
+            >
+              <Moon size={16} />
+              深色
+            </Button>
+            <Button
+              variant={theme === "system" ? "default" : "outline"}
+              onClick={() => setTheme("system")}
+              className="flex items-center gap-2"
+            >
+              <Settings size={16} />
+              系統
+            </Button>
+          </div>
+        </CollapsibleSettingsCard>
+
+        {/* 語音設定 */}
+        <CollapsibleSettingsCard
+          accent="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+          icon={<Mic size={20} />}
+          title={<h3 className="font-bold text-lg">語音控制</h3>}
+          subtitle="全域語音 · Ctrl+Shift+V"
+        >
+          <div className="space-y-3">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-white/70 p-3 dark:border-gray-800 dark:bg-gray-950/40">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-gray-300"
+                checked={voicePreferences.successSound}
+                onChange={(event) => updateVoicePreferences({ successSound: event.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">安全操作成功音</span>
+                <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">搜尋、重新整理等直接執行時播放輕提示音</span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-white/70 p-3 dark:border-gray-800 dark:bg-gray-950/40">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-gray-300"
+                checked={voicePreferences.autoStartGlobal}
+                onChange={(event) => updateVoicePreferences({ autoStartGlobal: event.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">開啟全域語音時自動開始聽</span>
+                <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">關閉後只會打開面板，需再按「開始說話」</span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-white/70 p-3 dark:border-gray-800 dark:bg-gray-950/40">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-gray-300"
+                checked={voicePreferences.confirmSafeActions}
+                onChange={(event) => updateVoicePreferences({ confirmSafeActions: event.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">安全操作也要確認</span>
+                <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">開啟後搜尋／切頁等也會先顯示摘要，較適合謹慎操作</span>
+              </span>
+            </label>
+          </div>
+        </CollapsibleSettingsCard>
+
+        {/* 安全設定 */}
+        <DataCard className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+              <Shield size={20} className="text-green-600 dark:text-green-400" />
+            </div>
+            <h3 className="font-bold text-lg">安全性</h3>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            帳號安全與隱私設定
+          </p>
+          <div className="text-sm text-gray-400">
+            即將推出...
+          </div>
+        </DataCard>
+
+        {/* 推播通知設定 */}
+        <CollapsibleSettingsCard
+          className="md:col-span-2"
+          accent="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+          icon={<Bell size={20} />}
+          title={<h3 className="font-bold text-lg">推播通知</h3>}
+          subtitle="APP 關閉時仍可收到到期提醒"
+        >
+          <div className="space-y-4">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-white/70 p-3 dark:border-gray-800 dark:bg-gray-950/40">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-gray-300"
+                checked={notificationPreferences.dashboardOsEnabled}
+                onChange={(event) => updateNotificationPreferences({ dashboardOsEnabled: event.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">Dashboard 到期提醒（開啟／返回 App 時跳出）</span>
+                <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                  在瀏覽器已授權通知的前提下自由開關；關閉後即使已授權也不會再跳出，不影響下方「推播通知」APP 關閉時的背景推播。
+                </span>
+              </span>
+            </label>
+            {notificationPermission === 'unsupported' ? (
+              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm text-gray-500">
+                此瀏覽器不支援推播通知
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">通知權限</span>
+                  <span className={`font-medium ${
+                    notificationPermission === 'granted' ? 'text-green-600 dark:text-green-400' :
+                    notificationPermission === 'denied' ? 'text-red-600 dark:text-red-400' :
+                    'text-yellow-600 dark:text-yellow-400'
+                  }`}>
+                    {notificationPermission === 'granted' ? '已授權' :
+                     notificationPermission === 'denied' ? '已拒絕' : '尚未設定'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">推播訂閱狀態</span>
+                  <span className={`font-medium ${pushSubscribed ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}>
+                    {pushSubscribed ? '已啟用' : '未啟用'}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-gray-600 dark:text-gray-400 block">NEXT_PUBLIC_VAPID_PUBLIC_KEY</label>
+                  <Input
+                    value={pushConfig.publicKey}
+                    onChange={(e) => setPushConfig({ publicKey: e.target.value })}
+                    placeholder="請貼上 Web Push VAPID 公鑰"
+                    className="font-mono text-sm"
+                  />
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={handleSavePushConfig}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      儲存推播設定
+                    </Button>
+                  </div>
+                </div>
+                {notificationPermission === 'denied' && (
+                  <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                    <p className="text-xs text-red-700 dark:text-red-300">
+                      通知權限已被拒絕。請至瀏覽器設定手動開啟通知權限，再重新整理頁面。
+                    </p>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  {!pushSubscribed ? (
+                    <Button
+                      onClick={enablePush}
+                      disabled={pushLoading || notificationPermission === 'denied'}
+                      className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {pushLoading ? (
+                        <><Loader2 size={16} className="animate-spin" /> 處理中...</>
+                      ) : (
+                        <><Bell size={16} /> 啟用推播通知</>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={disablePush}
+                      disabled={pushLoading}
+                      variant="outline"
+                      className="flex-1 flex items-center justify-center gap-2 text-gray-600 dark:text-gray-400"
+                    >
+                      {pushLoading ? (
+                        <><Loader2 size={16} className="animate-spin" /> 處理中...</>
+                      ) : (
+                        <><Bell size={16} /> 取消推播通知</>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
+                    <span className="text-base">💡</span>
+                    <span>
+                      <strong>先儲存推播公鑰，再啟用推播通知。</strong> 每天 05:06（台灣時間）會自動推播到期提醒，即使 APP 完全關閉也能收到通知。
+                    </span>
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 dark:border-indigo-900 dark:bg-indigo-950/40">
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2">
+                      <Activity size={18} className="text-indigo-600 dark:text-indigo-400" />
+                      <div>
+                        <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-100">通知自我檢測</p>
+                        <p className="text-xs text-indigo-700/80 dark:text-indigo-300/80">
+                          檢查權限、SW、VAPID、Appwrite、到期掃描與 Email 設定
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        onClick={() => void handleNotificationSelfCheck(false)}
+                        disabled={selfCheckLoading}
+                        variant="outline"
+                        className="flex items-center justify-center gap-2"
+                      >
+                        {selfCheckLoading ? (
+                          <><Loader2 size={16} className="animate-spin" /> 檢測中...</>
+                        ) : (
+                          <><Activity size={16} /> 執行檢測</>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={() => void handleNotificationSelfCheck(true)}
+                        disabled={selfCheckLoading}
+                        className="flex items-center justify-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700"
+                      >
+                        {selfCheckLoading ? (
+                          <><Loader2 size={16} className="animate-spin" /> 檢測中...</>
+                        ) : (
+                          <><Bell size={16} /> 檢測 + 測試 OS 通知</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {selfCheckReport && (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="font-medium text-indigo-900 dark:text-indigo-100">總評：</span>
+                        <span className={`font-bold ${selfCheckStatusClass(selfCheckReport.overall)}`}>
+                          {selfCheckStatusLabel(selfCheckReport.overall)}
+                        </span>
+                        <span className="text-xs text-indigo-700/70 dark:text-indigo-300/70">
+                          通過 {selfCheckReport.summary.pass} · 警告 {selfCheckReport.summary.warn} · 失敗 {selfCheckReport.summary.fail} · 資訊 {selfCheckReport.summary.info}
+                        </span>
+                        <span className="text-xs text-indigo-600/60 dark:text-indigo-400/60">
+                          {new Date(selfCheckReport.checkedAt).toLocaleString("zh-TW")}
+                        </span>
+                      </div>
+                      <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                        {selfCheckReport.items.map((row) => (
+                          <div
+                            key={row.id}
+                            className="flex items-start gap-2 rounded-lg border border-indigo-100 bg-white/80 px-3 py-2 text-sm dark:border-indigo-900/60 dark:bg-gray-950/50"
+                          >
+                            {row.status === "pass" ? (
+                              <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-green-600" />
+                            ) : row.status === "fail" ? (
+                              <X size={16} className="mt-0.5 shrink-0 text-red-600" />
+                            ) : row.status === "warn" ? (
+                              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+                            ) : (
+                              <Info size={16} className="mt-0.5 shrink-0 text-sky-600" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-medium text-gray-800 dark:text-gray-100">{row.label}</span>
+                                <span className={`text-xs font-semibold ${selfCheckStatusClass(row.status)}`}>
+                                  {selfCheckStatusLabel(row.status)}
+                                </span>
+                                <span className="text-[10px] uppercase tracking-wide text-gray-400">{row.channel}</span>
+                              </div>
+                              <p className="mt-0.5 break-words text-xs text-gray-600 dark:text-gray-400">{row.detail}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </CollapsibleSettingsCard>
+
+        {/* 全站共用的四位數密碼 */}
+        <CollapsibleSettingsCard
+          className="md:col-span-2"
+          accent="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+          icon={<Key size={20} />}
+          title={<h3 className="font-bold text-lg">四位數密碼</h3>}
+          subtitle="全站共用；目前用於顯示鋒兄額度的 accessToken 與帶入 ChatGPT 用量"
+        >
+          <AccessPinSettings />
+        </CollapsibleSettingsCard>
+
+        {/* Resend Email 通知設定 */}
+        <CollapsibleSettingsCard
+          className="md:col-span-2"
+          accent="bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400"
+          icon={<Mail size={20} />}
+          title={<h3 className="font-bold text-lg">Resend Email 通知</h3>}
+          subtitle="訂閱到期前一天、食品到期前一周各提醒一次"
+        >
+          <div className="flex flex-col gap-4 mb-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2 rounded-2xl border border-rose-100 bg-rose-50/60 px-3 py-2 dark:border-rose-900/50 dark:bg-rose-950/30">
+              <label htmlFor="resend-slot-count" className="text-sm text-rose-700 dark:text-rose-300">
+                顯示組數
+              </label>
+              <select
+                id="resend-slot-count"
+                value={resendVisibleSlotCount}
+                onChange={(event) => setResendVisibleSlotCount(Number(event.target.value))}
+                className="rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-sm font-semibold text-rose-700 outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-100 dark:border-rose-800 dark:bg-gray-950 dark:text-rose-200 dark:focus:ring-rose-900"
+              >
+                {RESEND_VISIBLE_SLOT_OPTIONS.map((count) => (
+                  <option key={count} value={count}>
+                    {count} 組
+                  </option>
+                ))}
+              </select>
+              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-rose-500 shadow-sm dark:bg-gray-950 dark:text-rose-300">
+                已設定 {configuredResendSlotCount}/{RESEND_SLOT_COUNT}
+              </span>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {resendSettingsLoading && (
+              <div className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400">
+                <Loader2 size={16} className="animate-spin" /> 載入 Resend 設定中…
+              </div>
+            )}
+            {Array.from({ length: resendVisibleSlotCount }, (_, index) => {
+              const slot = index + 1;
+              const fields = getResendSlotFields(slot);
+              return (
+                <div key={slot} className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm text-gray-600 dark:text-gray-400 block">{fields.envApiKey}</label>
+                    <Input
+                      type="password"
+                      value={resendConfig[fields.apiKey] || ''}
+                      onChange={(e) => setResendConfig({ ...resendConfig, [fields.apiKey]: e.target.value })}
+                      placeholder="re_..."
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-gray-600 dark:text-gray-400 block">通知收件 Email {slot === 1 ? '' : slot}</label>
+                    <Input
+                      type="email"
+                      value={resendConfig[fields.toEmail] || ''}
+                      onChange={(e) => setResendConfig({ ...resendConfig, [fields.toEmail]: e.target.value })}
+                      placeholder={slot === 1 ? "you@example.com" : `you${slot}@example.com`}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+            <div className="space-y-2">
+              <label className="text-sm text-gray-600 dark:text-gray-400 block">通知密碼</label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  type="password"
+                  value={resendPassword}
+                  onChange={(e) => setResendPassword(e.target.value)}
+                  placeholder={resendHasPassword ? "輸入密碼以解鎖 API Key" : "設定至少 4 碼的通知密碼"}
+                  className="font-mono text-sm flex-1"
+                  autoComplete="new-password"
+                />
+                {resendHasPassword ? (
+                  <Button
+                    onClick={handleUnlockResend}
+                    disabled={resendUnlocking || !resendPassword.trim()}
+                    variant="outline"
+                    className="sm:w-56 flex items-center justify-center gap-2"
+                  >
+                    {resendUnlocking ? (
+                      <><Loader2 size={16} className="animate-spin" /> 解鎖中...</>
+                    ) : (
+                      <><Key size={16} /> {resendUnlocked ? "重新解鎖並載入金鑰" : "解鎖並載入金鑰"}</>
+                    )}
+                  </Button>
+                ) : (
+                  <span className="flex-1 text-xs text-emerald-600 dark:text-emerald-400 flex items-center">
+                    此欄位即為要設定的通知密碼，直接按「儲存 Resend 設定」即可建立。
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-400">
+                {resendHasPassword
+                  ? resendUnlocked
+                    ? "已解鎖：目前表單顯示明文 API Key，匯出／匯入／儲存均可直接操作。"
+                    : "儲存、匯出或匯入明文 API Key 前，請先輸入密碼解鎖。"
+                  : "尚未設定通知密碼。設定後 API Key 與收件 Email 會儲存於 notificationsettings，並以密碼保護。"}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-gray-600 dark:text-gray-400 block">寄件人</label>
+              <Input
+                value={resendConfig.fromEmail}
+                onChange={(e) => setResendConfig({ ...resendConfig, fromEmail: e.target.value })}
+                placeholder="FengBro <onboarding@resend.dev>"
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button
+                onClick={handleSaveResendConfig}
+                disabled={resendSaving}
+                variant="outline"
+                className="flex-1"
+              >
+                {resendSaving ? (
+                  <><Loader2 size={16} className="animate-spin" /> 儲存中...</>
+                ) : (
+                  <><CheckCircle2 size={16} /> 儲存 Resend 設定</>
+                )}
+              </Button>
+              <Button
+                onClick={handleTestResendNotification}
+                disabled={resendTestLoading}
+                className="flex-1 flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 text-white"
+                title="檢查今天是否有剔好到期的項目；若應寄發但今天還沒寄成就補寄，已寄過不會重寄"
+              >
+                {resendTestLoading ? (
+                  <><Loader2 size={16} className="animate-spin" /> 檢查中...</>
+                ) : (
+                  <><Send size={16} /> 檢查／補寄今日 Email</>
+                )}
+              </Button>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                ref={resendCsvInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={handleResendCsvFileSelect}
+              />
+              <Button onClick={handleExportResendCsv} variant="outline" className="flex-1">
+                <Download size={16} /> 匯出 CSV
+              </Button>
+              <Button
+                onClick={() => resendCsvInputRef.current?.click()}
+                variant="outline"
+                className="flex-1"
+                title="從 CSV 匯入 RESEND_API_KEY / 通知收件 Email（相同 Email 更新，其餘新增）"
+              >
+                <Upload size={16} /> 匯入 CSV
+              </Button>
+            </div>
+            <div className="p-3 bg-rose-50 dark:bg-rose-950 rounded-lg border border-rose-200 dark:border-rose-800">
+              <p className="text-xs text-rose-700 dark:text-rose-300">
+                {`Vercel Cron 每天 05:16、11:16、17:16（台灣時間）檢查三次（後兩次為補檢，若前一次已寄出不會重寄）；部署環境至少需設定一組 RESEND_API_KEY / RESEND_TO_EMAIL，最多共 ${RESEND_SLOT_COUNT} 組，可設定到 RESEND_API_KEY${RESEND_SLOT_COUNT} / RESEND_TO_EMAIL${RESEND_SLOT_COUNT}。`}
+              </p>
+            </div>
+          </div>
+        </CollapsibleSettingsCard>
+
+        {/* Strapi 媒體庫 清理 */}
+        <CollapsibleSettingsCard
+          className="md:col-span-2"
+          accent="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+          icon={<HardDrive size={20} />}
+          title={<h3 className="font-bold text-lg">Strapi 媒體庫 管理</h3>}
+          subtitle="統計與清理未引用的儲存檔案"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              系統會掃描 Strapi 媒體庫 中的所有檔案，找出資料庫中未引用的多餘檔案（圖片、影片、音樂、文件、播客）。分段影片會連同 manifest 與所有 PART 一起納入引用判斷。
+            </p>
+            
+            {/* 進度条 - 掃描 */}
+            {scanProgress && (
+              <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    {scanProgress.stage}
+                  </span>
+                  <span className="text-xs text-blue-700 dark:text-blue-300">
+                    {scanProgress.current}%
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 dark:bg-blue-900 rounded-full h-2 mb-2">
+                  <div 
+                    className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${scanProgress.current}%` }}
+                  />
+                </div>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  {scanProgress.message}
+                </p>
+              </div>
+            )}
+            
+            {/* 進度条 - 刪除 */}
+            {deleteProgress && (
+              <div className="p-4 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-red-900 dark:text-red-100">
+                    {deleteProgress.stage}
+                  </span>
+                  <span className="text-xs text-red-700 dark:text-red-300">
+                    {deleteProgress.current}/{deleteProgress.total}
+                  </span>
+                </div>
+                <div className="w-full bg-red-200 dark:bg-red-900 rounded-full h-2 mb-2">
+                  <div 
+                    className="bg-red-600 dark:bg-red-400 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(deleteProgress.current / deleteProgress.total) * 100}%` }}
+                  />
+                </div>
+                <div className="flex justify-between items-center">
+                  <p className="text-xs text-red-700 dark:text-red-300">
+                    {deleteProgress.message}
+                  </p>
+                  {deleteProgress.deleted !== undefined && deleteProgress.failed !== undefined && (
+                    <span className="text-xs text-red-700 dark:text-red-300">
+                      ✅ {deleteProgress.deleted} | ❌ {deleteProgress.failed}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {storageStats && (
+              <div className="p-4 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-4">
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">總檔案數</span>
+                    <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{storageStats.totalFiles}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">已引用</span>
+                    <p className="text-lg font-bold text-green-600">{storageStats.referencedFiles}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">多餘檔案</span>
+                    <p className="text-lg font-bold text-red-600">{storageStats.orphanedFiles}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">推估可釋放</span>
+                    <p className="text-lg font-bold text-red-600">{formatFileSize(storageStats.orphanedSize || 0)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">Storage 總量</span>
+                    <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatFileSize(storageStats.totalSize || 0)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">已引用空間</span>
+                    <p className="text-lg font-bold text-green-600">{formatFileSize(storageStats.referencedSize || 0)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">多餘占比</span>
+                    <p className="text-lg font-bold text-red-600">{(storageStats.orphanedSizePercentage || 0).toFixed(1)}%</p>
+                  </div>
+                </div>
+                {storageStats.orphanedSizeByType && (
+                  <div className="border-t border-amber-200 dark:border-amber-800 pt-3">
+                    <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">多餘檔案推估空間：</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                      {[
+                        ['圖片', 'images'],
+                        ['影片', 'videos'],
+                        ['音樂', 'music'],
+                        ['文件', 'documents'],
+                        ['播客', 'podcasts'],
+                        ['其他', 'other'],
+                      ].map(([label, key]) => (
+                        <div key={key} className="flex items-center justify-between px-2 py-1 bg-white dark:bg-gray-800 rounded">
+                          <span className="text-gray-600 dark:text-gray-400">
+                            {label} {storageStats.orphanedByType?.[key] || 0} 個
+                          </span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">
+                            {formatFileSize(storageStats.orphanedSizeByType?.[key] || 0)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {storageStats.collectionCounts && (
+                  <div className="border-t border-amber-200 dark:border-amber-800 pt-3">
+                    <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">表格引用明細：</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                      {Object.entries(storageStats.collectionCounts as Record<string, number>).map(([collection, count]) => (
+                        <div key={collection} className="flex items-center justify-between px-2 py-1 bg-white dark:bg-gray-800 rounded">
+                          <span className="text-gray-600 dark:text-gray-400">{collection}</span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{count} 筆</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <Button
+                onClick={handleCountOrphanedFiles}
+                disabled={cleaningStorage}
+                className="flex-1 flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                {cleaningStorage ? (
+                  <><Loader2 size={16} className="animate-spin" /> 統計中...</>
+                ) : (
+                  <><HardDrive size={16} /> 統計多餘檔案</>
+                )}
+              </Button>
+              <Button
+                onClick={handleDeleteOrphanedFiles}
+                disabled={cleaningStorage || !storageStats || storageStats.orphanedFiles === 0}
+                variant="outline"
+                className="flex-1 flex items-center justify-center gap-2 text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                {cleaningStorage ? (
+                  <><Loader2 size={16} className="animate-spin" /> 刪除中...</>
+                ) : (
+                  <><Trash2 size={16} /> 刪除多餘檔案</>
+                )}
+              </Button>
+            </div>
+            <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
+                <span className="text-base">💡</span>
+                <span>
+                  <strong>使用步驟：</strong>1. 點擊「統計多餘檔案」查看數量  2. 確認後點擊「刪除多餘檔案」清理儲存空間
+                </span>
+              </p>
+            </div>
+          </div>
+        </CollapsibleSettingsCard>
+      </div>
+
+      {/* 版本資訊 */}
+      <DataCard className="p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-lg mb-1">應用程式版本</h3>
+            <p className="text-sm text-gray-500">鋒兄管理系統 v{packageJson.version}</p>
+          </div>
+          <div className="text-right text-sm text-gray-400">
+            <p>Remix {packageJson.dependencies["@remix-run/react"].replace(/^\^/, "")}</p>
+            <p>React {packageJson.dependencies.react.replace(/^\^/, "")}</p>
+          </div>
+        </div>
+      </DataCard>
+
+      {/* 建立進度對話框 */}
+      {progress && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="font-bold text-lg flex items-center gap-2">
+                {progress.isComplete ? (
+                  <CheckCircle2 size={20} className="text-green-500" />
+                ) : progress.isError ? (
+                  <X size={20} className="text-red-500" />
+                ) : (
+                  <Loader2 size={20} className="text-blue-500 animate-spin" />
+                )}
+                建立 {progress.tableName} Table
+              </h3>
+              {(progress.isComplete || progress.isError) && (
+                <Button variant="ghost" size="sm" onClick={closeProgressDialog}>
+                  <X size={18} />
+                </Button>
+              )}
+            </div>
+            
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              {/* Progress Bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">進度</span>
+                  <span className="font-mono font-bold text-blue-600">{progress.percent}%</span>
+                </div>
+                <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-300 ${
+                      progress.isError ? 'bg-red-500' : progress.isComplete ? 'bg-green-500' : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${progress.percent}%` }}
+                  />
+                </div>
+              </div>
+              
+              {/* Current Status */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+                <p className="text-sm text-gray-600 dark:text-gray-300">{progress.message}</p>
+                {progress.currentAttribute && !progress.isComplete && (
+                  <p className="text-xs text-gray-400 mt-1 font-mono">
+                    欄位: {progress.currentAttribute}
+                  </p>
+                )}
+                {progress.collectionId && (
+                  <p className="text-xs text-gray-400 mt-1 font-mono">
+                    ID: {progress.collectionId}
+                  </p>
+                )}
+              </div>
+
+              {/* Column Counter */}
+              {progress.totalColumns > 0 && (
+                <div className="flex justify-center">
+                  <span className="text-3xl font-bold text-gray-800 dark:text-gray-200">
+                    {progress.currentColumn}
+                  </span>
+                  <span className="text-lg text-gray-400 self-end mb-1">
+                    /{progress.totalColumns} 欄位
+                  </span>
+                </div>
+              )}
+
+              {/* Close Button */}
+              {(progress.isComplete || progress.isError) && (
+                <Button 
+                  className="w-full" 
+                  onClick={closeProgressDialog}
+                  variant={progress.isError ? "destructive" : "default"}
+                >
+                  {progress.isError ? '關閉' : '完成'}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resend CSV 匯入預覽 */}
+      {resendImportPreview && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4" onClick={() => setResendImportPreview(null)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="resend-csv-import-title"
+            className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 id="resend-csv-import-title" className="font-bold text-lg flex items-center gap-2">
+                <Upload size={18} className="text-rose-500" />
+                CSV 匯入預覽
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setResendImportPreview(null)}>
+                <X size={18} />
+              </Button>
+            </div>
+            <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                將以「收件 Email」配對：相同 Email 更新 API Key，新 Email 依序填入後方空格。合併結果如下（共 {resendImportPreview.length} 組）：
+              </p>
+              <div className="space-y-2">
+                {resendImportPreview.map((slot, index) => (
+                  <div key={`${slot.toEmail}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 dark:bg-gray-800 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-xs text-gray-500 dark:text-gray-400">{slot.apiKey}</p>
+                      <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{slot.toEmail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 border-t border-gray-200 dark:border-gray-700 p-4 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => setResendImportPreview(null)}>
+                取消
+              </Button>
+              <Button
+                onClick={handleConfirmResendImport}
+                disabled={resendImportPreview.length === 0}
+                className="bg-rose-600 hover:bg-rose-700 text-white"
+              >
+                確認匯入（{resendImportPreview.length} 組）
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 全站共用的四位數密碼。
+ *
+ * 比照 Resend 通知密碼：沒有預設值，第一次使用時在這裡建立，
+ * 以 scrypt hash 存在 notificationsettings 表（documentId "pin"），
+ * 程式碼與環境變數都不會有這組密碼；忘記只能重設、無法查回。
+ */
+function AccessPinSettings() {
+  const [hasPin, setHasPin] = useState<boolean | null>(null);
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [status, setStatus] = useState("");
+  const [failed, setFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchApi<{ hasPin: boolean }>(API_ENDPOINTS.ACCESS_PIN)
+      .then((data) => {
+        if (!cancelled) setHasPin(Boolean(data.hasPin));
+      })
+      .catch(() => {
+        if (!cancelled) setHasPin(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onlyDigits = (value: string) => value.replace(/\D/g, "").slice(0, 4);
+
+  const handleSave = async () => {
+    if (!/^\d{4}$/.test(newPin)) {
+      setFailed(true);
+      setStatus("密碼必須是四位數字");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setFailed(true);
+      setStatus("兩次輸入的密碼不一致");
+      return;
+    }
+    if (hasPin && !/^\d{4}$/.test(currentPin)) {
+      setFailed(true);
+      setStatus("請輸入目前的四位數密碼");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await fetchApi(API_ENDPOINTS.ACCESS_PIN, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(hasPin ? { pin: currentPin, newPin } : { newPin }),
+      });
+      setFailed(false);
+      setStatus(hasPin ? "✅ 密碼已變更。" : "✅ 密碼已建立，現在可以在鋒兄額度顯示 accessToken 與帶入用量了。");
+      setHasPin(true);
+      setCurrentPin("");
+      setNewPin("");
+      setConfirmPin("");
+    } catch (error) {
+      setFailed(true);
+      setStatus(error instanceof Error ? error.message : "設定密碼失敗");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (hasPin === null) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+        <Loader2 size={16} className="animate-spin" /> 讀取密碼狀態中…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        {hasPin
+          ? "已設定。顯示 accessToken 明文或用已存的 token 帶入用量時需要這組密碼。"
+          : "尚未設定。設定後才能在鋒兄額度顯示 accessToken 明文或帶入 ChatGPT 用量。"}
+      </p>
+
+      <div className="flex flex-wrap items-end gap-3">
+        {hasPin ? (
+          <label className="text-sm">
+            <span className="mb-1.5 block text-gray-600 dark:text-gray-400">目前密碼</span>
+            <Input
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={4}
+              placeholder="••••"
+              value={currentPin}
+              onChange={(event) => setCurrentPin(onlyDigits(event.target.value))}
+              className="h-10 w-28 text-center tracking-[0.4em]"
+            />
+          </label>
+        ) : null}
+        <label className="text-sm">
+          <span className="mb-1.5 block text-gray-600 dark:text-gray-400">
+            {hasPin ? "新密碼" : "四位數密碼"}
+          </span>
+          <Input
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            maxLength={4}
+            placeholder="••••"
+            value={newPin}
+            onChange={(event) => setNewPin(onlyDigits(event.target.value))}
+            className="h-10 w-28 text-center tracking-[0.4em]"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1.5 block text-gray-600 dark:text-gray-400">再輸入一次</span>
+          <Input
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            maxLength={4}
+            placeholder="••••"
+            value={confirmPin}
+            onChange={(event) => setConfirmPin(onlyDigits(event.target.value))}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void handleSave();
+            }}
+            className="h-10 w-28 text-center tracking-[0.4em]"
+          />
+        </label>
+        <Button onClick={handleSave} disabled={saving} variant="outline" className="h-10">
+          {saving ? (
+            <><Loader2 size={16} className="animate-spin" /> 儲存中…</>
+          ) : (
+            <><Key size={16} /> {hasPin ? "變更密碼" : "建立密碼"}</>
+          )}
+        </Button>
+      </div>
+
+      {status ? (
+        <p className={`text-sm ${failed ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+          {status}
+        </p>
+      ) : null}
+
+      <p className="text-xs text-gray-400">
+        密碼以 scrypt 雜湊存於 notificationsettings，不會回傳給瀏覽器，忘記只能重設。
+      </p>
+    </div>
+  );
+}

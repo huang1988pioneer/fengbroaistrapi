@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "podcasts",
+  "info": {
+    "singularName": "podcast",
+    "pluralName": "podcasts",
+    "displayName": "podcast"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "file": {
+      "type": "text"
+    },
+    "filetype": {
+      "type": "string"
+    },
+    "note": {
+      "type": "text"
+    },
+    "ref": {
+      "type": "text"
+    },
+    "category": {
+      "type": "string"
+    },
+    "hash": {
+      "type": "text"
+    },
+    "cover": {
+      "type": "text"
+    }
+  }
+}

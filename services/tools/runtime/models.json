@@ -1,0 +1,1238 @@
+{
+  "article": {
+    "path": "articles",
+    "attributes": {
+      "title": {
+        "type": "string"
+      },
+      "content": {
+        "type": "text"
+      },
+      "category": {
+        "type": "string"
+      },
+      "ref": {
+        "type": "string"
+      },
+      "newDate": {
+        "type": "datetime"
+      },
+      "url1": {
+        "type": "string"
+      },
+      "url2": {
+        "type": "string"
+      },
+      "url3": {
+        "type": "string"
+      },
+      "file1": {
+        "type": "richtext"
+      },
+      "file1name": {
+        "type": "string"
+      },
+      "file1type": {
+        "type": "string"
+      },
+      "file2": {
+        "type": "richtext"
+      },
+      "file2name": {
+        "type": "string"
+      },
+      "file2type": {
+        "type": "string"
+      },
+      "file3": {
+        "type": "richtext"
+      },
+      "file3name": {
+        "type": "string"
+      },
+      "file3type": {
+        "type": "string"
+      },
+      "media": {
+        "type": "media",
+        "multiple": true,
+        "allowedTypes": [
+          "images",
+          "files",
+          "videos",
+          "audios"
+        ]
+      }
+    }
+  },
+  "bank": {
+    "path": "banks",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "deposit": {
+        "type": "integer"
+      },
+      "site": {
+        "type": "string"
+      },
+      "address": {
+        "type": "richtext"
+      },
+      "withdrawals": {
+        "type": "integer"
+      },
+      "transfer": {
+        "type": "integer"
+      },
+      "activity": {
+        "type": "string"
+      },
+      "card": {
+        "type": "string"
+      },
+      "account": {
+        "type": "string"
+      },
+      "cardimg": {
+        "type": "media",
+        "multiple": false,
+        "allowedTypes": [
+          "images",
+          "files",
+          "videos",
+          "audios"
+        ]
+      }
+    }
+  },
+  "cloud": {
+    "path": "clouds",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "unique": true
+      },
+      "site": {
+        "type": "string"
+      },
+      "account": {
+        "type": "email"
+      },
+      "space": {
+        "type": "integer"
+      }
+    }
+  },
+  "commonaccount": {
+    "path": "commonaccounts",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "site01": {
+        "type": "string"
+      },
+      "site02": {
+        "type": "string"
+      },
+      "site03": {
+        "type": "string"
+      },
+      "site04": {
+        "type": "string"
+      },
+      "site05": {
+        "type": "string"
+      },
+      "site06": {
+        "type": "string"
+      },
+      "site07": {
+        "type": "string"
+      },
+      "site08": {
+        "type": "string"
+      },
+      "site09": {
+        "type": "string"
+      },
+      "site10": {
+        "type": "string"
+      },
+      "site11": {
+        "type": "string"
+      },
+      "site12": {
+        "type": "string"
+      },
+      "site13": {
+        "type": "string"
+      },
+      "site14": {
+        "type": "string"
+      },
+      "site15": {
+        "type": "string"
+      },
+      "site16": {
+        "type": "string"
+      },
+      "site17": {
+        "type": "string"
+      },
+      "site18": {
+        "type": "string"
+      },
+      "site19": {
+        "type": "string"
+      },
+      "site20": {
+        "type": "string"
+      },
+      "site21": {
+        "type": "string"
+      },
+      "site22": {
+        "type": "string"
+      },
+      "site23": {
+        "type": "string"
+      },
+      "site24": {
+        "type": "string"
+      },
+      "site25": {
+        "type": "string"
+      },
+      "site26": {
+        "type": "string"
+      },
+      "site27": {
+        "type": "string"
+      },
+      "site28": {
+        "type": "string"
+      },
+      "site29": {
+        "type": "string"
+      },
+      "site30": {
+        "type": "string"
+      },
+      "site31": {
+        "type": "string"
+      },
+      "site32": {
+        "type": "string"
+      },
+      "site33": {
+        "type": "string"
+      },
+      "site34": {
+        "type": "string"
+      },
+      "site35": {
+        "type": "string"
+      },
+      "site36": {
+        "type": "string"
+      },
+      "site37": {
+        "type": "string"
+      },
+      "note01": {
+        "type": "string"
+      },
+      "note02": {
+        "type": "string"
+      },
+      "note03": {
+        "type": "string"
+      },
+      "note04": {
+        "type": "string"
+      },
+      "note05": {
+        "type": "string"
+      },
+      "note06": {
+        "type": "string"
+      },
+      "note07": {
+        "type": "string"
+      },
+      "note08": {
+        "type": "string"
+      },
+      "note09": {
+        "type": "string"
+      },
+      "note10": {
+        "type": "string"
+      },
+      "note11": {
+        "type": "string"
+      },
+      "note12": {
+        "type": "string"
+      },
+      "note13": {
+        "type": "string"
+      },
+      "note14": {
+        "type": "string"
+      },
+      "note15": {
+        "type": "string"
+      },
+      "note16": {
+        "type": "string"
+      },
+      "note17": {
+        "type": "string"
+      },
+      "note18": {
+        "type": "string"
+      },
+      "note19": {
+        "type": "string"
+      },
+      "note20": {
+        "type": "string"
+      },
+      "note21": {
+        "type": "string"
+      },
+      "note22": {
+        "type": "string"
+      },
+      "note23": {
+        "type": "string"
+      },
+      "note24": {
+        "type": "string"
+      },
+      "note25": {
+        "type": "string"
+      },
+      "note26": {
+        "type": "string"
+      },
+      "note27": {
+        "type": "string"
+      },
+      "note28": {
+        "type": "string"
+      },
+      "note29": {
+        "type": "string"
+      },
+      "note30": {
+        "type": "string"
+      },
+      "note31": {
+        "type": "string"
+      },
+      "note32": {
+        "type": "string"
+      },
+      "note33": {
+        "type": "string"
+      },
+      "note34": {
+        "type": "string"
+      },
+      "note35": {
+        "type": "string"
+      },
+      "note36": {
+        "type": "string"
+      },
+      "note37": {
+        "type": "string"
+      }
+    }
+  },
+  "commondocument": {
+    "path": "commondocuments",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "file": {
+        "type": "text"
+      },
+      "filetype": {
+        "type": "string"
+      },
+      "note": {
+        "type": "text"
+      },
+      "ref": {
+        "type": "text"
+      },
+      "category": {
+        "type": "string"
+      },
+      "hash": {
+        "type": "text"
+      },
+      "cover": {
+        "type": "text"
+      }
+    }
+  },
+  "experience": {
+    "path": "experiences",
+    "attributes": {
+      "title": {
+        "type": "string",
+        "unique": true
+      },
+      "year": {
+        "type": "integer"
+      },
+      "gov": {
+        "type": "string"
+      },
+      "site": {
+        "type": "string"
+      }
+    }
+  },
+  "fengbro-news-source": {
+    "path": "fengbro-news-sources",
+    "attributes": {
+      "sourceId": {
+        "type": "string",
+        "required": true,
+        "unique": true
+      },
+      "name": {
+        "type": "string"
+      },
+      "domain": {
+        "type": "string"
+      },
+      "homeUrl": {
+        "type": "text"
+      },
+      "adapter": {
+        "type": "string"
+      },
+      "searchUrlTemplate": {
+        "type": "text"
+      },
+      "locked": {
+        "type": "boolean",
+        "default": false
+      }
+    }
+  },
+  "file-type": {
+    "path": "file-types",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true,
+        "unique": true
+      }
+    }
+  },
+  "financeinstrument2": {
+    "path": "financeinstrument2s",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "symbol": {
+        "type": "string",
+        "required": true
+      },
+      "provider": {
+        "type": "string",
+        "required": true
+      },
+      "group": {
+        "type": "string"
+      },
+      "imageUrl1": {
+        "type": "string"
+      },
+      "imageUrl2": {
+        "type": "string"
+      },
+      "imageUrl3": {
+        "type": "string"
+      },
+      "youtubeUrl": {
+        "type": "string"
+      },
+      "bilibiliUrl": {
+        "type": "string"
+      },
+      "linkUrl1": {
+        "type": "text"
+      },
+      "linkUrl2": {
+        "type": "text"
+      },
+      "linkUrl3": {
+        "type": "text"
+      },
+      "featured": {
+        "type": "boolean",
+        "default": false
+      }
+    }
+  },
+  "food": {
+    "path": "foods",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "amount": {
+        "type": "integer"
+      },
+      "price": {
+        "type": "integer"
+      },
+      "shop": {
+        "type": "string"
+      },
+      "todate": {
+        "type": "datetime"
+      },
+      "photo": {
+        "type": "string"
+      },
+      "photohash": {
+        "type": "text"
+      },
+      "photoHash": {
+        "type": "string"
+      }
+    }
+  },
+  "host": {
+    "path": "hosts",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "unique": true
+      },
+      "site": {
+        "type": "string"
+      },
+      "account": {
+        "type": "email"
+      }
+    }
+  },
+  "image": {
+    "path": "images",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "file": {
+        "type": "text"
+      },
+      "filetype": {
+        "type": "string"
+      },
+      "note": {
+        "type": "text"
+      },
+      "ref": {
+        "type": "text"
+      },
+      "category": {
+        "type": "string"
+      },
+      "hash": {
+        "type": "text"
+      },
+      "cover": {
+        "type": "text"
+      }
+    }
+  },
+  "image-type": {
+    "path": "image-types",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true,
+        "unique": true
+      }
+    }
+  },
+  "inventory": {
+    "path": "inventories",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "unique": true
+      },
+      "price": {
+        "type": "integer"
+      },
+      "amount": {
+        "type": "integer"
+      },
+      "img": {
+        "type": "media",
+        "multiple": true,
+        "allowedTypes": [
+          "images",
+          "files",
+          "videos",
+          "audios"
+        ]
+      },
+      "shop": {
+        "type": "string"
+      }
+    }
+  },
+  "landtophistory": {
+    "path": "landtophistories",
+    "attributes": {
+      "source": {
+        "type": "string",
+        "required": true
+      },
+      "snapshotKey": {
+        "type": "string",
+        "required": true
+      },
+      "productId": {
+        "type": "string",
+        "required": true
+      },
+      "brand": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "sourceUrl": {
+        "type": "string"
+      },
+      "landtopPrice": {
+        "type": "integer"
+      },
+      "suggestedPrice": {
+        "type": "integer"
+      },
+      "snapshotDate": {
+        "type": "datetime",
+        "required": true
+      }
+    }
+  },
+  "mail": {
+    "path": "mails",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "unique": true
+      },
+      "host": {
+        "type": "string"
+      },
+      "address": {
+        "type": "email"
+      },
+      "account": {
+        "type": "email"
+      },
+      "site": {
+        "type": "string"
+      }
+    }
+  },
+  "manual-price": {
+    "path": "manual-prices",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "currency": {
+        "type": "string"
+      },
+      "price": {
+        "type": "integer"
+      },
+      "date": {
+        "type": "date"
+      },
+      "note": {
+        "type": "text"
+      },
+      "productId": {
+        "type": "string"
+      },
+      "recordId": {
+        "type": "string"
+      },
+      "recordsJson": {
+        "type": "text"
+      },
+      "localId": {
+        "type": "string"
+      }
+    }
+  },
+  "member": {
+    "path": "members",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "unique": true
+      },
+      "title": {
+        "type": "string"
+      },
+      "relation": {
+        "type": "string"
+      },
+      "gov": {
+        "type": "string"
+      },
+      "site": {
+        "type": "string"
+      },
+      "img": {
+        "type": "media",
+        "multiple": true,
+        "allowedTypes": [
+          "images",
+          "files",
+          "videos",
+          "audios"
+        ]
+      }
+    }
+  },
+  "menuusage": {
+    "path": "menuusages",
+    "attributes": {
+      "moduleId": {
+        "type": "string",
+        "required": true
+      },
+      "count": {
+        "type": "integer"
+      },
+      "lastUsedAt": {
+        "type": "datetime"
+      }
+    }
+  },
+  "music-item": {
+    "path": "music-items",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "file": {
+        "type": "text"
+      },
+      "filetype": {
+        "type": "string"
+      },
+      "lyrics": {
+        "type": "text"
+      },
+      "note": {
+        "type": "text"
+      },
+      "ref": {
+        "type": "text"
+      },
+      "category": {
+        "type": "string"
+      },
+      "hash": {
+        "type": "text"
+      },
+      "language": {
+        "type": "string"
+      },
+      "cover": {
+        "type": "text"
+      }
+    }
+  },
+  "notificationsetting": {
+    "path": "notificationsettings",
+    "attributes": {
+      "passwordHash": {
+        "type": "text"
+      },
+      "fromEmail": {
+        "type": "text"
+      },
+      "slotsJson": {
+        "type": "text"
+      },
+      "key": {
+        "type": "string",
+        "unique": true
+      },
+      "googleClientId": {
+        "type": "text"
+      },
+      "googleApiKey": {
+        "type": "text"
+      }
+    }
+  },
+  "podcast": {
+    "path": "podcasts",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "file": {
+        "type": "text"
+      },
+      "filetype": {
+        "type": "string"
+      },
+      "note": {
+        "type": "text"
+      },
+      "ref": {
+        "type": "text"
+      },
+      "category": {
+        "type": "string"
+      },
+      "hash": {
+        "type": "text"
+      },
+      "cover": {
+        "type": "text"
+      }
+    }
+  },
+  "quota": {
+    "path": "quotas",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "serviceType": {
+        "type": "string"
+      },
+      "account": {
+        "type": "string"
+      },
+      "quotaRemaining": {
+        "type": "integer"
+      },
+      "quotaPoints": {
+        "type": "integer"
+      },
+      "litmediaAccount": {
+        "type": "string"
+      },
+      "pointsSyncedAt": {
+        "type": "datetime"
+      },
+      "quotaRatio": {
+        "type": "integer"
+      },
+      "quotaExpiry": {
+        "type": "datetime"
+      },
+      "usageSyncedAt": {
+        "type": "datetime"
+      },
+      "ratio5h": {
+        "type": "integer"
+      },
+      "expiry5h": {
+        "type": "string"
+      },
+      "ratioWeek": {
+        "type": "integer"
+      },
+      "expiryWeek": {
+        "type": "string"
+      },
+      "ratioMonth": {
+        "type": "integer"
+      },
+      "expiryMonth": {
+        "type": "string"
+      },
+      "resetCreditsBalance": {
+        "type": "integer"
+      },
+      "resetCreditsExpiry": {
+        "type": "string"
+      },
+      "note": {
+        "type": "text"
+      },
+      "accessToken": {
+        "type": "text"
+      }
+    }
+  },
+  "reinstall": {
+    "path": "reinstalls",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "category": {
+        "type": "string"
+      },
+      "system": {
+        "type": "string"
+      },
+      "softwareType": {
+        "type": "string"
+      },
+      "licenseType": {
+        "type": "string"
+      },
+      "serial": {
+        "type": "text"
+      },
+      "viewPassword": {
+        "type": "string"
+      },
+      "subscriptionSoftware": {
+        "type": "boolean",
+        "default": false
+      },
+      "subscriptionPeriod": {
+        "type": "string"
+      },
+      "subscriptionPrice": {
+        "type": "integer"
+      },
+      "subscriptionCurrency": {
+        "type": "string"
+      },
+      "site": {
+        "type": "text"
+      },
+      "note": {
+        "type": "text"
+      }
+    }
+  },
+  "routine": {
+    "path": "routines",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "note": {
+        "type": "text"
+      },
+      "lastdate1": {
+        "type": "datetime"
+      },
+      "lastdate2": {
+        "type": "datetime"
+      },
+      "lastdate3": {
+        "type": "datetime"
+      },
+      "link": {
+        "type": "string"
+      },
+      "photo": {
+        "type": "string"
+      },
+      "nextdate": {
+        "type": "date"
+      },
+      "site": {
+        "type": "string"
+      }
+    }
+  },
+  "shoppinglist": {
+    "path": "shoppinglists",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "plannedDate": {
+        "type": "datetime"
+      },
+      "price": {
+        "type": "integer"
+      },
+      "currency": {
+        "type": "string"
+      },
+      "quantity": {
+        "type": "integer"
+      },
+      "shop": {
+        "type": "string"
+      },
+      "pickupMethod": {
+        "type": "string"
+      },
+      "imageUrl": {
+        "type": "string"
+      },
+      "account": {
+        "type": "string"
+      },
+      "note": {
+        "type": "text"
+      }
+    }
+  },
+  "sitevisit": {
+    "path": "sitevisits",
+    "attributes": {
+      "count": {
+        "type": "integer"
+      },
+      "lastVisitAt": {
+        "type": "datetime"
+      },
+      "currentStreak": {
+        "type": "integer"
+      },
+      "lastVisitDate": {
+        "type": "string"
+      }
+    }
+  },
+  "subscription": {
+    "path": "subscriptions",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "site": {
+        "type": "string"
+      },
+      "price": {
+        "type": "integer"
+      },
+      "nextdate": {
+        "type": "datetime"
+      },
+      "note": {
+        "type": "text"
+      },
+      "account": {
+        "type": "string"
+      },
+      "currency": {
+        "type": "string"
+      },
+      "continue": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "tool-price-history": {
+    "path": "tool-price-histories",
+    "attributes": {
+      "toolType": {
+        "type": "string",
+        "required": true
+      },
+      "queryText": {
+        "type": "string",
+        "required": true
+      },
+      "title": {
+        "type": "string"
+      },
+      "source": {
+        "type": "string"
+      },
+      "currentPrice": {
+        "type": "integer"
+      },
+      "highPrice": {
+        "type": "integer"
+      },
+      "lowPrice": {
+        "type": "integer"
+      },
+      "resultUrl": {
+        "type": "string"
+      },
+      "notice": {
+        "type": "text"
+      }
+    }
+  },
+  "trialpurchase": {
+    "path": "trialpurchases",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "eventDate": {
+        "type": "datetime"
+      },
+      "firstPurchasePrice": {
+        "type": "integer"
+      },
+      "regularPrice": {
+        "type": "integer"
+      },
+      "account": {
+        "type": "string"
+      },
+      "note": {
+        "type": "text"
+      },
+      "trialStatus": {
+        "type": "string"
+      },
+      "purchaseStatus": {
+        "type": "string"
+      }
+    }
+  },
+  "tubechannel": {
+    "path": "tubechannels",
+    "attributes": {
+      "sourceUrl": {
+        "type": "text",
+        "required": true
+      },
+      "alias": {
+        "type": "string"
+      }
+    }
+  },
+  "video": {
+    "path": "videos",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "file": {
+        "type": "text"
+      },
+      "filetype": {
+        "type": "string"
+      },
+      "note": {
+        "type": "text"
+      },
+      "ref": {
+        "type": "text"
+      },
+      "category": {
+        "type": "string"
+      },
+      "hash": {
+        "type": "text"
+      },
+      "cover": {
+        "type": "text"
+      },
+      "fileSize": {
+        "type": "biginteger"
+      },
+      "url": {
+        "type": "string"
+      },
+      "img": {
+        "type": "media",
+        "multiple": true,
+        "allowedTypes": [
+          "images",
+          "files",
+          "videos",
+          "audios"
+        ]
+      },
+      "type": {
+        "type": "string"
+      },
+      "date": {
+        "type": "date"
+      },
+      "song": {
+        "type": "string"
+      },
+      "site": {
+        "type": "string"
+      },
+      "watch": {
+        "type": "string"
+      },
+      "youtube": {
+        "type": "string"
+      },
+      "year": {
+        "type": "integer"
+      },
+      "season": {
+        "type": "string"
+      }
+    }
+  },
+  "video-type": {
+    "path": "video-types",
+    "attributes": {
+      "name": {
+        "type": "string",
+        "required": true,
+        "unique": true
+      }
+    }
+  },
+  "pushsubscription": {
+    "path": "pushsubscriptions",
+    "attributes": {
+      "endpoint": {
+        "type": "text",
+        "required": true
+      },
+      "p256dh": {
+        "type": "text",
+        "required": true
+      },
+      "auth": {
+        "type": "text",
+        "required": true
+      }
+    }
+  }
+}

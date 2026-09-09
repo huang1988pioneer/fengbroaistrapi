@@ -1,0 +1,20 @@
+{
+  "kind": "collectionType",
+  "collectionName": "image_types",
+  "info": {
+    "singularName": "image-type",
+    "pluralName": "image-types",
+    "displayName": "ImageType"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "collectionType",
+  "collectionName": "menuusages",
+  "info": {
+    "singularName": "menuusage",
+    "pluralName": "menuusages",
+    "displayName": "menuusage"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "moduleId": {
+      "type": "string",
+      "required": true
+    },
+    "count": {
+      "type": "integer"
+    },
+    "lastUsedAt": {
+      "type": "datetime"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "kind": "collectionType",
+  "collectionName": "manual_prices",
+  "info": {
+    "singularName": "manual-price",
+    "pluralName": "manual-prices",
+    "displayName": "ManualPrice"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "currency": {
+      "type": "string"
+    },
+    "price": {
+      "type": "integer"
+    },
+    "date": {
+      "type": "date"
+    },
+    "note": {
+      "type": "text"
+    },
+    "productId": {
+      "type": "string"
+    },
+    "recordId": {
+      "type": "string"
+    },
+    "recordsJson": {
+      "type": "text"
+    },
+    "localId": {
+      "type": "string"
+    }
+  }
+}

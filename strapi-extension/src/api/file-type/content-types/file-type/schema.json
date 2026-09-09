@@ -1,0 +1,20 @@
+{
+  "kind": "collectionType",
+  "collectionName": "file_types",
+  "info": {
+    "singularName": "file-type",
+    "pluralName": "file-types",
+    "displayName": "FileType"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    }
+  }
+}

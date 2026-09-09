@@ -1,0 +1,982 @@
+/**
+ * Client-side helpers for custom 鋒兄金融 instruments:
+ * parse Yahoo / CNBC quote URLs (or bare tickers) and guess a display group.
+ *
+ * Groups are region-based: 韓國 / 日本 / 台灣 / 美國 / 其他.
+ */
+
+export type FinanceCustomProvider = "cnbc" | "yahoo";
+
+/** Region groups for 鋒兄金融 display & custom instruments. */
+export type FinanceCustomGroup = "korea" | "japan" | "taiwan" | "us" | "other";
+
+/** User-defined external page link (PTT board, official index page, etc.). */
+export type FinanceRelatedLink = {
+  label: string;
+  url: string;
+};
+
+export type CustomFinanceInstrument = {
+  name: string;
+  symbol: string;
+  provider: FinanceCustomProvider;
+  group: FinanceCustomGroup;
+  /** Optional media / external video links shown on the quote card. */
+  imageUrl?: string;
+  imageUrls?: string[];
+  youtubeUrl?: string;
+  bilibiliUrl?: string;
+  /**
+   * Optional custom http(s) pages shown as ExternalLink chips on the quote card
+   * (e.g. https://www.ptt.cc/bbs/stock/index.html).
+   */
+  relatedLinks?: FinanceRelatedLink[];
+  /** When true, show this instrument in 精選焦點. */
+  featured?: boolean;
+};
+
+export type CustomFinanceDraft = {
+  /** 代稱（顯示名稱）；空白時用代號 */
+  name: string;
+  /** 報價網址或代號 */
+  urlOrSymbol: string;
+  provider: FinanceCustomProvider;
+  group: FinanceCustomGroup;
+  /** One image URL per line (optional). */
+  imageUrlsText: string;
+  youtubeUrl: string;
+  bilibiliUrl: string;
+  /**
+   * Custom page URLs (optional). One per line; optional `標籤|網址` format.
+   * Example: `PTT 股板|https://www.ptt.cc/bbs/stock/index.html`
+   */
+  relatedLinksText: string;
+  /** Pin to 精選焦點. */
+  featured: boolean;
+};
+
+/** Max instruments user can pin as 精選焦點. */
+export const MAX_FEATURED_FINANCE_INSTRUMENTS = 9;
+
+/** Match server-side custom quote id generation (`custom-${slug(provider-symbol)}`). */
+export function buildCustomFinanceQuoteId(
+  provider: FinanceCustomProvider,
+  symbol: string
+): string {
+  const idBase =
+    `${provider}-${symbol}`
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "item";
+  return `custom-${idBase}`;
+}
+
+const MAX_CUSTOM_IMAGE_URLS = 3;
+const MAX_CUSTOM_RELATED_LINKS = 3;
+/** Strapi 媒體庫 view URLs with long project/query need more headroom than generic links. */
+const MAX_FINANCE_IMAGE_URL_LEN = 1200;
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** True when URL points at Strapi 媒體庫 (absolute or path-style). */
+export function isAppwriteStorageUrl(value: string): boolean {
+  return /\/storage\/buckets\//i.test(value);
+}
+
+/**
+ * Unwrap `/api/media-proxy?url=…` (absolute or site-relative) back to the inner media URL.
+ * Keeps Strapi 媒體庫 URLs portable in localStorage / CSV (no embedded API key).
+ */
+export function unwrapFinanceMediaProxyUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || !trimmed.includes("media-proxy")) return trimmed;
+  try {
+    const parsed = new URL(trimmed, "http://localhost");
+    if (!parsed.pathname.includes("/api/media-proxy")) return trimmed;
+    const inner = parsed.searchParams.get("url");
+    if (inner?.trim()) return inner.trim();
+  } catch {
+    // fall through to regex
+  }
+  const match = trimmed.match(/[?&]url=([^&]+)/i);
+  if (match?.[1]) {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
+  }
+  return trimmed;
+}
+
+/**
+ * Canonical image URL for 鋒兄金融 (storage / CSV / draft).
+ * - Unwraps media-proxy so exports do not leak `_key`
+ * - Accepts absolute http(s) Strapi 媒體庫 URLs
+ * - Rejects bare relative paths that cannot be resolved without endpoint config
+ */
+export function canonicalizeFinanceImageUrl(value: unknown, maxLen = MAX_FINANCE_IMAGE_URL_LEN): string | undefined {
+  if (typeof value !== "string") return undefined;
+  let trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  // Prefer original storage URL over proxied form
+  trimmed = unwrapFinanceMediaProxyUrl(trimmed);
+
+  // Absolute Appwrite / external http(s)
+  if (/^https?:\/\//i.test(trimmed)) {
+    if (trimmed.length > maxLen) return undefined;
+    return isHttpUrl(trimmed) ? trimmed : undefined;
+  }
+
+  // Protocol-relative //host/…
+  if (trimmed.startsWith("//")) {
+    const withProtocol = `https:${trimmed}`;
+    if (withProtocol.length > maxLen) return undefined;
+    return isHttpUrl(withProtocol) ? withProtocol : undefined;
+  }
+
+  // Site-relative Appwrite path (/v1/storage/buckets/… or /storage/buckets/…)
+  // Keep as-is only if it already looks like a full Appwrite path we can proxy later;
+  // without host it cannot round-trip across machines, so still require http(s) for storage.
+  // (Users should paste full Storage view URLs from 鋒兄圖片.)
+  return undefined;
+}
+
+/** Normalize optional http(s) URL; empty / invalid → undefined. */
+export function normalizeOptionalHttpUrl(value: unknown, maxLen = 500): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim().slice(0, maxLen);
+  if (!trimmed) return undefined;
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return isHttpUrl(withProtocol) ? withProtocol : undefined;
+}
+
+/**
+ * Split a multi-image cell / textarea into raw URL candidates.
+ * Prefer `;` and newlines (CSV multi-value). Avoid naive comma-split that could
+ * mangle rare URLs; only split on comma when the next token starts a new http(s) URL.
+ */
+export function splitFinanceImageUrlList(input: string): string[] {
+  const text = input.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  if (!text) return [];
+
+  if (/[;\n]/.test(text)) {
+    return text
+      .split(/[;\n]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
+  // Single token, or comma-separated full URLs (legacy paste)
+  if (/,/.test(text) && /https?:\/\//i.test(text)) {
+    return text
+      .split(/,\s*(?=https?:\/\/)/i)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
+  return [text];
+}
+
+/** Parse draft textarea / stored list / CSV cell into clean image URLs (incl. Strapi 媒體庫). */
+export function normalizeFinanceImageUrls(input: unknown): string[] {
+  const rawList: string[] = [];
+  if (typeof input === "string") {
+    rawList.push(...splitFinanceImageUrlList(input));
+  } else if (Array.isArray(input)) {
+    for (const item of input) {
+      if (typeof item === "string" && item.trim()) {
+        // Array entries may themselves be multi-value cells
+        if (/[;\n]/.test(item) || (/https?:\/\//i.test(item) && item.includes(","))) {
+          rawList.push(...splitFinanceImageUrlList(item));
+        } else {
+          rawList.push(item.trim());
+        }
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  for (const raw of rawList) {
+    const url = canonicalizeFinanceImageUrl(raw, MAX_FINANCE_IMAGE_URL_LEN);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+    if (urls.length >= MAX_CUSTOM_IMAGE_URLS) break;
+  }
+  return urls;
+}
+
+/**
+ * Guess a short chip label from a page URL when the user only pastes the link.
+ * e.g. ptt.cc/bbs/stock → "PTT stock"；investing.com → "Investing".
+ */
+export function guessFinanceRelatedLinkLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    const path = parsed.pathname || "";
+
+    if (host === "ptt.cc" || host.endsWith(".ptt.cc")) {
+      const board = path.match(/\/bbs\/([^/]+)/i)?.[1];
+      if (board) {
+        const decoded = decodeURIComponent(board);
+        // Common TW boards keep original casing for readability
+        if (/^stock$/i.test(decoded)) return "PTT 股板";
+        if (/^home-sale$/i.test(decoded)) return "PTT 房屋";
+        if (/^railway$/i.test(decoded)) return "PTT 鐵道";
+        return `PTT ${decoded}`.slice(0, 40);
+      }
+      return "PTT";
+    }
+
+    if (host.includes("investing.com")) return "Investing";
+    if (host.includes("twse.com.tw")) return "證交所";
+    if (host.includes("tpex.org.tw")) return "櫃買中心";
+    if (host.includes("cnyes.com")) return "鉅亨網";
+    if (host.includes("moneydj.com")) return "MoneyDJ";
+    if (host.includes("cmoney.tw")) return "CMoney";
+    if (host.includes("wantgoo.com")) return "玩股網";
+    if (host.includes("goodinfo.tw")) return "Goodinfo";
+    if (host.includes("yahoo.com") || host.includes("yahoo.co.jp")) return "Yahoo";
+    if (host.includes("cnbc.com")) return "CNBC";
+    if (host.includes("bloomberg.com")) return "Bloomberg";
+    if (host.includes("reuters.com")) return "Reuters";
+
+    // Hostname without TLD as fallback: "example.com" → "example"
+    const base = host.split(".")[0] || host;
+    return (base.charAt(0).toUpperCase() + base.slice(1)).slice(0, 40);
+  } catch {
+    return "連結";
+  }
+}
+
+/**
+ * Parse draft textarea / stored list into relatedLinks.
+ * Accepts:
+ * - plain URL lines
+ * - `標籤|網址` or `標籤｜網址` (fullwidth pipe)
+ * - objects `{ label, url }`
+ */
+export function normalizeFinanceRelatedLinks(input: unknown): FinanceRelatedLink[] {
+  const rawLines: Array<{ label?: string; url: string }> = [];
+
+  if (typeof input === "string") {
+    for (const line of input.split(/\n+/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      // label|url — only split on first pipe so URLs with | are rare but ok if no label
+      const pipeMatch = trimmed.match(/^(.+?)\s*[|｜]\s*(https?:\/\/\S+|www\.\S+|\S+\.\S+\/\S.*)$/i);
+      if (pipeMatch?.[1] && pipeMatch[2]) {
+        rawLines.push({ label: pipeMatch[1].trim(), url: pipeMatch[2].trim() });
+        continue;
+      }
+      rawLines.push({ url: trimmed });
+    }
+  } else if (Array.isArray(input)) {
+    for (const item of input) {
+      if (typeof item === "string" && item.trim()) {
+        rawLines.push({ url: item.trim() });
+        continue;
+      }
+      if (item && typeof item === "object") {
+        const rec = item as { label?: unknown; url?: unknown; href?: unknown };
+        const url =
+          typeof rec.url === "string"
+            ? rec.url
+            : typeof rec.href === "string"
+              ? rec.href
+              : "";
+        if (!url.trim()) continue;
+        rawLines.push({
+          label: typeof rec.label === "string" ? rec.label : undefined,
+          url: url.trim(),
+        });
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  const links: FinanceRelatedLink[] = [];
+  for (const raw of rawLines) {
+    const url = normalizeOptionalHttpUrl(raw.url, 800);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    const label =
+      typeof raw.label === "string" && raw.label.trim()
+        ? raw.label.trim().slice(0, 40)
+        : guessFinanceRelatedLinkLabel(url);
+    links.push({ label, url });
+    if (links.length >= MAX_CUSTOM_RELATED_LINKS) break;
+  }
+  return links;
+}
+
+/** Serialize related links back to draft textarea format. */
+export function formatFinanceRelatedLinksText(links: FinanceRelatedLink[] | undefined): string {
+  if (!links?.length) return "";
+  return links
+    .map((link) => {
+      const guessed = guessFinanceRelatedLinkLabel(link.url);
+      // Keep compact: only write label when user customized it
+      if (!link.label || link.label === guessed) return link.url;
+      return `${link.label}|${link.url}`;
+    })
+    .join("\n");
+}
+
+export const FINANCE_CUSTOM_GROUPS: FinanceCustomGroup[] = [
+  "korea",
+  "japan",
+  "taiwan",
+  "us",
+  "other",
+];
+
+export const FINANCE_GROUP_LABELS: Record<FinanceCustomGroup, string> = {
+  korea: "韓國",
+  japan: "日本",
+  taiwan: "台灣",
+  us: "美國",
+  other: "其他",
+};
+
+/** Legacy asset-type groups → region groups (localStorage / old API payloads). */
+const LEGACY_FINANCE_GROUP_MAP: Record<string, FinanceCustomGroup> = {
+  asia: "other",
+  "asia-stocks": "japan",
+  korea: "korea",
+  tw: "taiwan",
+  "tw-stocks": "taiwan",
+  us: "us",
+  "us-stocks": "us",
+  fx: "other",
+  rates: "other",
+  commodities: "other",
+  crypto: "other",
+  valuation: "other",
+  japan: "japan",
+  taiwan: "taiwan",
+  other: "other",
+};
+
+export function migrateFinanceGroup(group: unknown): FinanceCustomGroup {
+  if (typeof group !== "string" || !group.trim()) return "other";
+  const key = group.trim();
+  if ((FINANCE_CUSTOM_GROUPS as string[]).includes(key)) {
+    return key as FinanceCustomGroup;
+  }
+  return LEGACY_FINANCE_GROUP_MAP[key] ?? "other";
+}
+
+export type FinanceMarketHint = "tw" | "jp";
+
+export type ParsedFinanceQuoteInput = {
+  symbol: string;
+  provider: FinanceCustomProvider;
+  /** True when the original input looked like a URL (provider taken from host). */
+  fromUrl: boolean;
+  sourceUrl?: string;
+  /**
+   * Host-based market hint when the URL itself implies a market
+   * (e.g. tw.stock.yahoo.com → Taiwan Yahoo 奇摩股市,
+   *  finance.yahoo.co.jp → Yahoo 日本ファイナンス).
+   */
+  marketHint?: FinanceMarketHint;
+};
+
+const BARE_SYMBOL_RE = /^[A-Z0-9.^@=_\-+%]{1,32}$/i;
+
+/** Yahoo 奇摩股市 (Taiwan Yahoo Finance) host. */
+const TAIWAN_YAHOO_STOCK_HOST = "tw.stock.yahoo.com";
+/** Yahoo!ファイナンス (Japan Yahoo Finance) host. */
+const JAPAN_YAHOO_FINANCE_HOST = "finance.yahoo.co.jp";
+
+/**
+ * Yahoo!ファイナンス Japan uses local index codes that global
+ * query1.finance.yahoo.com does not recognize (404 / Not Found).
+ * Map local code → chart API symbol for price/history fetches.
+ * Keep the local code for display and finance.yahoo.co.jp source links.
+ *
+ * @see https://finance.yahoo.co.jp/quote/998407.O (日経平均)
+ * @see https://finance.yahoo.com/quote/%5EN225
+ */
+const JAPAN_YAHOO_LOCAL_TO_CHART_SYMBOL: Record<string, string> = {
+  "998407.O": "^N225", // 日経平均株価
+};
+
+/** Friendly 代稱 when Japan index title scrape is unavailable. */
+const JAPAN_YAHOO_LOCAL_DISPLAY_NAME: Record<string, string> = {
+  "998407.O": "日経平均株価",
+};
+
+/**
+ * Symbol to use with Yahoo chart API (query1.finance.yahoo.com).
+ * Japan-local index codes (e.g. 998407.O) map to global codes (^N225).
+ */
+export function resolveYahooChartSymbol(symbol: string): string {
+  const s = symbol.trim().toUpperCase();
+  if (!s) return s;
+  return JAPAN_YAHOO_LOCAL_TO_CHART_SYMBOL[s] || s;
+}
+
+/** True when symbol is a Japan Yahoo-only local index code. */
+export function isJapanYahooLocalIndexSymbol(symbol: string): boolean {
+  const s = symbol.trim().toUpperCase();
+  return Boolean(s && JAPAN_YAHOO_LOCAL_TO_CHART_SYMBOL[s]);
+}
+
+/** Optional fixed display name for Japan-local index codes. */
+export function getJapanYahooLocalDisplayName(symbol: string): string | undefined {
+  const s = symbol.trim().toUpperCase();
+  return JAPAN_YAHOO_LOCAL_DISPLAY_NAME[s];
+}
+
+function ensureHttps(input: string) {
+  return /^https?:\/\//i.test(input) ? input : `https://${input}`;
+}
+
+function hostnameFromInput(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return "";
+  try {
+    if (/^https?:\/\//i.test(trimmed) || trimmed.includes("/")) {
+      return new URL(ensureHttps(trimmed)).hostname.replace(/^www\./i, "").toLowerCase();
+    }
+  } catch {
+    // fall through
+  }
+  return trimmed.replace(/^www\./i, "").toLowerCase();
+}
+
+/**
+ * True when the URL/host is Taiwan Yahoo 奇摩股市 (tw.stock.yahoo.com).
+ * Used for 台股來源自動辨識.
+ */
+export function isTaiwanYahooStockSource(input?: string | null): boolean {
+  if (!input) return false;
+  const host = hostnameFromInput(input);
+  if (host === TAIWAN_YAHOO_STOCK_HOST) return true;
+  // Bare hostname fragments / partial paste
+  return /(^|\.)tw\.stock\.yahoo\.com$/i.test(host) || /tw\.stock\.yahoo\.com/i.test(input);
+}
+
+/**
+ * True when the URL/host is Yahoo!ファイナンス Japan (finance.yahoo.co.jp).
+ * Used for 日股來源自動辨識.
+ */
+export function isJapanYahooFinanceSource(input?: string | null): boolean {
+  if (!input) return false;
+  const host = hostnameFromInput(input);
+  if (host === JAPAN_YAHOO_FINANCE_HOST) return true;
+  return /(^|\.)finance\.yahoo\.co\.jp$/i.test(host) || /finance\.yahoo\.co\.jp/i.test(input);
+}
+
+/** True if the string looks like a finance quote page URL (not a bare ticker). */
+export function isFinanceQuoteUrl(input: string) {
+  const trimmed = input.trim();
+  if (!trimmed) return false;
+  if (/^https?:\/\//i.test(trimmed)) return true;
+  return /^(www\.)?(cnbc\.com|finance\.yahoo\.com|finance\.yahoo\.co\.jp|tw\.stock\.yahoo\.com)\b/i.test(
+    trimmed
+  );
+}
+
+function extractYahooSymbol(pathname: string) {
+  const match = pathname.match(/\/quote\/([^/?#]+)/i);
+  if (!match?.[1]) return "";
+  try {
+    return decodeURIComponent(match[1]).trim().toUpperCase();
+  } catch {
+    return match[1].trim().toUpperCase();
+  }
+}
+
+function extractCnbcSymbol(pathname: string, searchParams: URLSearchParams) {
+  const pathMatch = pathname.match(/\/quotes?\/([^/?#]+)/i);
+  if (pathMatch?.[1]) {
+    try {
+      return decodeURIComponent(pathMatch[1]).trim().toUpperCase();
+    } catch {
+      return pathMatch[1].trim().toUpperCase();
+    }
+  }
+  const fromQuery =
+    searchParams.get("symbol") ||
+    searchParams.get("q") ||
+    searchParams.get("qsearchterm") ||
+    "";
+  return fromQuery.trim().toUpperCase();
+}
+
+/**
+ * Parse a Yahoo / CNBC quote URL or a bare ticker into symbol + provider.
+ * Bare symbols default provider to yahoo unless they look like CNBC-style indices (leading `.`).
+ */
+export function parseFinanceQuoteInput(input: string): ParsedFinanceQuoteInput | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  if (isFinanceQuoteUrl(trimmed)) {
+    try {
+      const url = new URL(ensureHttps(trimmed));
+      const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+
+      const isTaiwanYahoo = host === TAIWAN_YAHOO_STOCK_HOST;
+      const isJapanYahoo = host === JAPAN_YAHOO_FINANCE_HOST || host.endsWith(".yahoo.co.jp");
+      const isYahoo =
+        host === "finance.yahoo.com" ||
+        isTaiwanYahoo ||
+        isJapanYahoo ||
+        (host.endsWith(".yahoo.com") && /\/quote\//i.test(url.pathname));
+      if (isYahoo) {
+        const symbol = extractYahooSymbol(url.pathname);
+        if (!symbol || symbol.length > 32) return null;
+        return {
+          symbol,
+          provider: "yahoo",
+          fromUrl: true,
+          sourceUrl: url.toString(),
+          // Yahoo 奇摩股市 → 台股；Yahoo 日本 → 日股
+          ...(isTaiwanYahoo
+            ? { marketHint: "tw" as const }
+            : isJapanYahoo
+              ? { marketHint: "jp" as const }
+              : {}),
+        };
+      }
+
+      const isCnbc = host === "cnbc.com" || host.endsWith(".cnbc.com");
+      if (isCnbc) {
+        const symbol = extractCnbcSymbol(url.pathname, url.searchParams);
+        if (!symbol || symbol.length > 32) return null;
+        return {
+          symbol,
+          provider: "cnbc",
+          fromUrl: true,
+          sourceUrl: url.toString(),
+        };
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Bare symbol / ticker
+  const symbol = trimmed.toUpperCase().replace(/\s+/g, "");
+  if (!BARE_SYMBOL_RE.test(symbol)) return null;
+
+  return {
+    symbol,
+    // CNBC index codes often start with `.` (e.g. .SOX, .SPX); Yahoo uses `^` for many indices.
+    provider: symbol.startsWith(".") ? "cnbc" : "yahoo",
+    fromUrl: false,
+  };
+}
+
+/** Stable key for a custom instrument (provider + symbol). */
+export function getCustomFinanceInstrumentKey(
+  instrument: Pick<CustomFinanceInstrument, "provider" | "symbol">
+) {
+  return `${instrument.provider}|${instrument.symbol.trim().toUpperCase()}`;
+}
+
+export type GuessFinanceGroupOptions = {
+  /** Quote page URL; tw.stock.yahoo.com / finance.yahoo.co.jp force regional groups. */
+  sourceUrl?: string;
+  /** From parseFinanceQuoteInput when host is a regional Yahoo Finance site. */
+  marketHint?: FinanceMarketHint;
+};
+
+/**
+ * Best-effort region group guess from ticker shape and optional source host
+ * (user can still override in the form).
+ *
+ * Taiwan Yahoo 奇摩股市 (`tw.stock.yahoo.com`) → 台灣.
+ * Yahoo Japan (`finance.yahoo.co.jp`) → 日本.
+ */
+export function guessFinanceGroup(
+  symbol: string,
+  options?: GuessFinanceGroupOptions
+): FinanceCustomGroup {
+  const s = symbol.trim().toUpperCase();
+  const fromTaiwanYahoo =
+    options?.marketHint === "tw" || isTaiwanYahooStockSource(options?.sourceUrl);
+  const fromJapanYahoo =
+    options?.marketHint === "jp" || isJapanYahooFinanceSource(options?.sourceUrl);
+
+  if (!s) {
+    if (fromTaiwanYahoo) return "taiwan";
+    if (fromJapanYahoo) return "japan";
+    return "us";
+  }
+
+  // Korea
+  if (s === ".KS11" || s === "^KS11" || s === "KORU") return "korea";
+  if (/\.KS$/i.test(s) || /\.KQ$/i.test(s)) return "korea";
+
+  // Japan
+  if (s === ".N225" || s === "^N225" || isJapanYahooLocalIndexSymbol(s)) return "japan";
+  if (/\.T$/i.test(s)) return "japan";
+  if (fromJapanYahoo) return "japan";
+
+  // Taiwan
+  if (s === "^TWII" || s === ".TWII" || s === "^TWOII" || s === ".TWOII") return "taiwan";
+  if (/\.TW$/i.test(s) || /\.TWO$/i.test(s)) return "taiwan";
+  if (s === "TSM" || s === "TSMX") return "taiwan";
+  if (fromTaiwanYahoo) return "taiwan";
+
+  // Global / other (FX, crypto, commodities, rates, valuation)
+  if (/=X$/i.test(s)) return "other";
+  if (/BTC|ETH|CRYPTO|CAPE/i.test(s)) return "other";
+  if (s.startsWith("@") || /=(F)$/i.test(s) || s.endsWith("=F")) return "other";
+  // US indices & equities
+  if (s.startsWith(".") || s.startsWith("^")) return "us";
+  return "us";
+}
+
+/** Display name for finance quote source (Yahoo 奇摩 vs global Yahoo, etc.). */
+export function getFinanceProviderDisplayName(input: {
+  provider?: string;
+  sourceUrl?: string;
+  marketHint?: FinanceMarketHint;
+}): string {
+  if (input.marketHint === "tw" || isTaiwanYahooStockSource(input.sourceUrl)) {
+    return "Yahoo 奇摩";
+  }
+  if (input.marketHint === "jp" || isJapanYahooFinanceSource(input.sourceUrl)) {
+    return "Yahoo 日本";
+  }
+  if (input.provider === "yahoo") return "Yahoo";
+  if (input.provider === "cnbc") return "CNBC";
+  return (input.provider || "Unknown").toUpperCase();
+}
+
+export type YahooQuoteSourceUrlOptions = {
+  /** Custom instrument group (taiwan → 奇摩 for TW-listed; japan → yahoo.co.jp). */
+  group?: string;
+  /** Original paste URL; regional Yahoo hosts force regional quote pages. */
+  sourceUrl?: string;
+  marketHint?: FinanceMarketHint;
+};
+
+/**
+ * True when a Yahoo quote should open on finance.yahoo.co.jp (Japan)
+ * rather than global finance.yahoo.com.
+ */
+export function isJapanYahooQuoteTarget(
+  symbol: string,
+  options?: YahooQuoteSourceUrlOptions
+): boolean {
+  if (options?.marketHint === "jp" || isJapanYahooFinanceSource(options?.sourceUrl)) {
+    return true;
+  }
+  const s = symbol.trim().toUpperCase();
+  if (!s) return false;
+  if (options?.group === "japan") {
+    if (/\.T$/i.test(s) || s === ".N225" || s === "^N225" || isJapanYahooLocalIndexSymbol(s)) {
+      return true;
+    }
+  }
+  // Tokyo Stock Exchange common suffix
+  if (/\.T$/i.test(s)) return true;
+  if (s === ".N225" || s === "^N225" || isJapanYahooLocalIndexSymbol(s)) return true;
+  return false;
+}
+
+/**
+ * True when a Yahoo quote should open on Yahoo 奇摩股市 (tw.stock.yahoo.com)
+ * rather than global finance.yahoo.com.
+ *
+ * Rules: marketHint/source host, taiwan/legacy TW groups, .TW/.TWO suffixes, major TW indices.
+ * US-listed Taiwan ADRs (TSM) stay on global Yahoo.
+ */
+export function isTaiwanYahooQuoteTarget(
+  symbol: string,
+  options?: YahooQuoteSourceUrlOptions
+): boolean {
+  if (options?.marketHint === "tw" || isTaiwanYahooStockSource(options?.sourceUrl)) {
+    return true;
+  }
+
+  const s = symbol.trim().toUpperCase();
+  if (!s) return false;
+  // US-listed ADR / leveraged products — not 奇摩
+  if (s === "TSM" || s === "TSMX") return false;
+
+  const group = options?.group;
+  if (
+    group === "taiwan" ||
+    group === "tw" ||
+    group === "tw-stocks"
+  ) {
+    // taiwan group + TW listing suffix / index → 奇摩
+    if (/\.TWO?$/i.test(s) || s.startsWith("^") || s.startsWith(".")) return true;
+  }
+
+  // TWSE (.TW) and TPEx / 櫃買 (.TWO)
+  if (/\.TWO?$/i.test(s)) return true;
+  if (s === "^TWII" || s === ".TWII" || s === "^TWOII" || s === ".TWOII") return true;
+  return false;
+}
+
+/**
+ * Public quote-page URL for a Yahoo symbol.
+ * Taiwan → tw.stock.yahoo.com；Japan → finance.yahoo.co.jp；else global finance.yahoo.com.
+ */
+export function buildYahooQuoteSourceUrl(
+  symbol: string,
+  options?: YahooQuoteSourceUrlOptions
+): string {
+  const encoded = encodeURIComponent(symbol.trim());
+  if (isTaiwanYahooQuoteTarget(symbol, options)) {
+    return `https://tw.stock.yahoo.com/quote/${encoded}`;
+  }
+  if (isJapanYahooQuoteTarget(symbol, options)) {
+    return `https://finance.yahoo.co.jp/quote/${encoded}`;
+  }
+  return `https://finance.yahoo.com/quote/${encoded}`;
+}
+
+/**
+ * Parse Yahoo 奇摩股市 HTML `<title>` into short display name.
+ * e.g. "川湖(2059.TW) 走勢圖 - Yahoo股市" → { name: "川湖", symbol: "2059.TW" }
+ *      "加權指數(^TWII) 走勢圖 - Yahoo股市" → { name: "加權指數", symbol: "^TWII" }
+ */
+export function parseTaiwanYahooQuotePageTitle(
+  title: string
+): { name: string; symbol: string } | null {
+  const cleaned = title.replace(/\s+/g, " ").trim();
+  if (!cleaned) return null;
+
+  const match = cleaned.match(/^(.+?)\(([^)]+)\)/);
+  if (!match?.[1] || !match[2]) return null;
+
+  const name = match[1].trim();
+  let symbol = match[2].trim();
+  try {
+    symbol = decodeURIComponent(symbol);
+  } catch {
+    // keep raw
+  }
+  symbol = symbol.toUpperCase();
+
+  if (!name || !symbol || name.length > 40 || symbol.length > 32) return null;
+  // Ignore generic shell titles
+  if (/^yahoo/i.test(name) || /走勢圖/.test(name)) return null;
+
+  return { name, symbol };
+}
+
+/**
+ * Parse Yahoo!ファイナンス Japan HTML `<title>` into short display name.
+ * e.g. "キオクシアホールディングス(株)【285A】：株価・株式情報（夜間PTS含む） - Yahoo!ファイナンス"
+ *   → { name: "キオクシアホールディングス", symbol: "285A" }
+ */
+export function parseJapanYahooQuotePageTitle(
+  title: string
+): { name: string; symbol: string } | null {
+  const cleaned = title.replace(/\s+/g, " ").trim();
+  if (!cleaned) return null;
+
+  // Primary: 会社名【コード】：…
+  const bracket = cleaned.match(/^(.+?)【([^】]+)】/);
+  if (bracket?.[1] && bracket[2]) {
+    let name = bracket[1].trim();
+    // Drop corporate form suffix for a cleaner 代稱: (株) / （株）
+    name = name.replace(/[（(]株[）)]\s*$/u, "").trim();
+    let symbol = bracket[2].trim().toUpperCase();
+    try {
+      symbol = decodeURIComponent(symbol);
+    } catch {
+      // keep raw
+    }
+    if (name && symbol && name.length <= 60 && symbol.length <= 32) {
+      if (!/^yahoo/i.test(name) && !/ファイナンス/.test(name)) {
+        return { name, symbol };
+      }
+    }
+  }
+
+  // Fallback: 会社名(コード.T) style if present
+  const paren = cleaned.match(/^(.+?)\(([^)]+\.T)\)/i);
+  if (paren?.[1] && paren[2]) {
+    const name = paren[1].replace(/[（(]株[）)]\s*$/u, "").trim();
+    const symbol = paren[2].trim().toUpperCase();
+    if (name && symbol && name.length <= 60) return { name, symbol };
+  }
+
+  return null;
+}
+
+/**
+ * Pick a display name from Yahoo chart meta.
+ *
+ * Yahoo often truncates `shortName` to a fixed width (e.g. SOXL →
+ * "Direxion Daily Semiconductor Bu" while longName is
+ * "Direxion Daily Semiconductor Bull 3X Shares"). Prefer `longName`
+ * when `shortName` is clearly a truncated prefix of it.
+ */
+export function pickYahooChartName(meta: {
+  shortName?: unknown;
+  longName?: unknown;
+  symbol?: unknown;
+}): string {
+  const shortName =
+    typeof meta.shortName === "string" ? meta.shortName.replace(/\s+/g, " ").trim() : "";
+  const longName =
+    typeof meta.longName === "string" ? meta.longName.replace(/\s+/g, " ").trim() : "";
+  const symbol =
+    typeof meta.symbol === "string" ? meta.symbol.replace(/\s+/g, " ").trim() : "";
+
+  if (shortName && longName) {
+    if (longName.length > shortName.length && longName.startsWith(shortName)) {
+      return longName;
+    }
+    return shortName;
+  }
+  return longName || shortName || symbol;
+}
+
+/** Public quote-page URL for a CNBC symbol. */
+export function buildCnbcQuoteSourceUrl(symbol: string): string {
+  return `https://www.cnbc.com/quotes/${encodeURIComponent(symbol.trim())}`;
+}
+
+/** Load an existing custom instrument into the add/edit draft form. */
+export function draftFromCustomFinanceInstrument(
+  instrument: CustomFinanceInstrument
+): CustomFinanceDraft {
+  const urlOrSymbol =
+    instrument.provider === "yahoo"
+      ? buildYahooQuoteSourceUrl(instrument.symbol, { group: instrument.group })
+      : buildCnbcQuoteSourceUrl(instrument.symbol);
+
+  const imageUrls = normalizeFinanceImageUrls(
+    instrument.imageUrls?.length
+      ? instrument.imageUrls
+      : instrument.imageUrl
+        ? [instrument.imageUrl]
+        : []
+  );
+
+  return {
+    name: instrument.name,
+    urlOrSymbol,
+    provider: instrument.provider,
+    group: migrateFinanceGroup(instrument.group),
+    imageUrlsText: imageUrls.join("\n"),
+    youtubeUrl: instrument.youtubeUrl || "",
+    bilibiliUrl: instrument.bilibiliUrl || "",
+    relatedLinksText: formatFinanceRelatedLinksText(instrument.relatedLinks),
+    featured: Boolean(instrument.featured),
+  };
+}
+
+export function normalizeCustomFinanceInstrument(
+  input: Partial<CustomFinanceInstrument> & {
+    imageUrlsText?: string;
+    relatedLinksText?: string;
+  }
+): CustomFinanceInstrument | null {
+  const symbol = typeof input.symbol === "string" ? input.symbol.trim().toUpperCase() : "";
+  if (!symbol || symbol.length > 32) return null;
+
+  const name =
+    typeof input.name === "string" && input.name.trim()
+      ? input.name.trim().slice(0, 80)
+      : symbol;
+  const provider = input.provider === "yahoo" ? "yahoo" : "cnbc";
+  const group = migrateFinanceGroup(input.group);
+
+  const imageUrls = normalizeFinanceImageUrls(
+    input.imageUrls?.length
+      ? input.imageUrls
+      : input.imageUrl
+        ? [input.imageUrl]
+        : input.imageUrlsText
+  );
+  const youtubeUrl = normalizeOptionalHttpUrl(input.youtubeUrl);
+  const bilibiliUrl = normalizeOptionalHttpUrl(input.bilibiliUrl);
+  const relatedLinks = normalizeFinanceRelatedLinks(
+    input.relatedLinks?.length ? input.relatedLinks : input.relatedLinksText
+  );
+
+  return {
+    name,
+    symbol,
+    provider,
+    group,
+    ...(imageUrls[0] ? { imageUrl: imageUrls[0] } : {}),
+    ...(imageUrls.length > 0 ? { imageUrls } : {}),
+    ...(youtubeUrl ? { youtubeUrl } : {}),
+    ...(bilibiliUrl ? { bilibiliUrl } : {}),
+    ...(relatedLinks.length > 0 ? { relatedLinks } : {}),
+    ...(input.featured ? { featured: true } : {}),
+  };
+}
+
+/**
+ * Build a custom instrument from the add form (代稱 + 網址/代號 + optional media / custom links).
+ */
+export function buildCustomFinanceInstrumentFromDraft(
+  draft: CustomFinanceDraft
+): CustomFinanceInstrument | null {
+  const parsed = parseFinanceQuoteInput(draft.urlOrSymbol);
+  if (!parsed) return null;
+
+  const provider = parsed.fromUrl
+    ? parsed.provider
+    : draft.provider === "yahoo"
+      ? "yahoo"
+      : "cnbc";
+
+  const group = FINANCE_CUSTOM_GROUPS.includes(draft.group)
+    ? draft.group
+    : guessFinanceGroup(parsed.symbol, {
+        sourceUrl: parsed.sourceUrl,
+        marketHint: parsed.marketHint,
+      });
+
+  return normalizeCustomFinanceInstrument({
+    name: draft.name,
+    symbol: parsed.symbol,
+    provider,
+    group,
+    imageUrls: normalizeFinanceImageUrls(draft.imageUrlsText),
+    youtubeUrl: draft.youtubeUrl,
+    bilibiliUrl: draft.bilibiliUrl,
+    relatedLinks: normalizeFinanceRelatedLinks(draft.relatedLinksText),
+    featured: Boolean(draft.featured),
+  });
+}
+
+export function createEmptyCustomFinanceDraft(
+  overrides?: Partial<CustomFinanceDraft>
+): CustomFinanceDraft {
+  return {
+    name: "",
+    urlOrSymbol: "",
+    provider: "cnbc",
+    group: "us",
+    imageUrlsText: "",
+    youtubeUrl: "",
+    bilibiliUrl: "",
+    relatedLinksText: "",
+    featured: false,
+    ...overrides,
+  };
+}

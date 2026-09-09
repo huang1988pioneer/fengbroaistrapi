@@ -1,0 +1,56 @@
+{
+  "kind": "collectionType",
+  "collectionName": "reinstalls",
+  "info": {
+    "singularName": "reinstall",
+    "pluralName": "reinstalls",
+    "displayName": "reinstall"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "category": {
+      "type": "string"
+    },
+    "system": {
+      "type": "string"
+    },
+    "softwareType": {
+      "type": "string"
+    },
+    "licenseType": {
+      "type": "string"
+    },
+    "serial": {
+      "type": "text"
+    },
+    "viewPassword": {
+      "type": "string"
+    },
+    "subscriptionSoftware": {
+      "type": "boolean",
+      "default": false
+    },
+    "subscriptionPeriod": {
+      "type": "string"
+    },
+    "subscriptionPrice": {
+      "type": "integer"
+    },
+    "subscriptionCurrency": {
+      "type": "string"
+    },
+    "site": {
+      "type": "text"
+    },
+    "note": {
+      "type": "text"
+    }
+  }
+}

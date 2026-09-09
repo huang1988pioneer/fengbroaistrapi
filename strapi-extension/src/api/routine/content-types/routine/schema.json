@@ -1,0 +1,43 @@
+{
+  "kind": "collectionType",
+  "collectionName": "routines",
+  "info": {
+    "singularName": "routine",
+    "pluralName": "routines",
+    "displayName": "routine"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "note": {
+      "type": "text"
+    },
+    "lastdate1": {
+      "type": "datetime"
+    },
+    "lastdate2": {
+      "type": "datetime"
+    },
+    "lastdate3": {
+      "type": "datetime"
+    },
+    "link": {
+      "type": "string"
+    },
+    "photo": {
+      "type": "string"
+    },
+    "nextdate": {
+      "type": "date"
+    },
+    "site": {
+      "type": "string"
+    }
+  }
+}

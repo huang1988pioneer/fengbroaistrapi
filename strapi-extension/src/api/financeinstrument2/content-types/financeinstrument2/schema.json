@@ -1,0 +1,58 @@
+{
+  "kind": "collectionType",
+  "collectionName": "financeinstrument2s",
+  "info": {
+    "singularName": "financeinstrument2",
+    "pluralName": "financeinstrument2s",
+    "displayName": "financeinstrument2"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "symbol": {
+      "type": "string",
+      "required": true
+    },
+    "provider": {
+      "type": "string",
+      "required": true
+    },
+    "group": {
+      "type": "string"
+    },
+    "imageUrl1": {
+      "type": "string"
+    },
+    "imageUrl2": {
+      "type": "string"
+    },
+    "imageUrl3": {
+      "type": "string"
+    },
+    "youtubeUrl": {
+      "type": "string"
+    },
+    "bilibiliUrl": {
+      "type": "string"
+    },
+    "linkUrl1": {
+      "type": "text"
+    },
+    "linkUrl2": {
+      "type": "text"
+    },
+    "linkUrl3": {
+      "type": "text"
+    },
+    "featured": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

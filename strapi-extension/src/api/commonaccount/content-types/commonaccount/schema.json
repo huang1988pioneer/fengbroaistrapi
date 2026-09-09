@@ -1,0 +1,241 @@
+{
+  "kind": "collectionType",
+  "collectionName": "commonaccounts",
+  "info": {
+    "singularName": "commonaccount",
+    "pluralName": "commonaccounts",
+    "displayName": "commonaccount"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "site01": {
+      "type": "string"
+    },
+    "site02": {
+      "type": "string"
+    },
+    "site03": {
+      "type": "string"
+    },
+    "site04": {
+      "type": "string"
+    },
+    "site05": {
+      "type": "string"
+    },
+    "site06": {
+      "type": "string"
+    },
+    "site07": {
+      "type": "string"
+    },
+    "site08": {
+      "type": "string"
+    },
+    "site09": {
+      "type": "string"
+    },
+    "site10": {
+      "type": "string"
+    },
+    "site11": {
+      "type": "string"
+    },
+    "site12": {
+      "type": "string"
+    },
+    "site13": {
+      "type": "string"
+    },
+    "site14": {
+      "type": "string"
+    },
+    "site15": {
+      "type": "string"
+    },
+    "site16": {
+      "type": "string"
+    },
+    "site17": {
+      "type": "string"
+    },
+    "site18": {
+      "type": "string"
+    },
+    "site19": {
+      "type": "string"
+    },
+    "site20": {
+      "type": "string"
+    },
+    "site21": {
+      "type": "string"
+    },
+    "site22": {
+      "type": "string"
+    },
+    "site23": {
+      "type": "string"
+    },
+    "site24": {
+      "type": "string"
+    },
+    "site25": {
+      "type": "string"
+    },
+    "site26": {
+      "type": "string"
+    },
+    "site27": {
+      "type": "string"
+    },
+    "site28": {
+      "type": "string"
+    },
+    "site29": {
+      "type": "string"
+    },
+    "site30": {
+      "type": "string"
+    },
+    "site31": {
+      "type": "string"
+    },
+    "site32": {
+      "type": "string"
+    },
+    "site33": {
+      "type": "string"
+    },
+    "site34": {
+      "type": "string"
+    },
+    "site35": {
+      "type": "string"
+    },
+    "site36": {
+      "type": "string"
+    },
+    "site37": {
+      "type": "string"
+    },
+    "note01": {
+      "type": "string"
+    },
+    "note02": {
+      "type": "string"
+    },
+    "note03": {
+      "type": "string"
+    },
+    "note04": {
+      "type": "string"
+    },
+    "note05": {
+      "type": "string"
+    },
+    "note06": {
+      "type": "string"
+    },
+    "note07": {
+      "type": "string"
+    },
+    "note08": {
+      "type": "string"
+    },
+    "note09": {
+      "type": "string"
+    },
+    "note10": {
+      "type": "string"
+    },
+    "note11": {
+      "type": "string"
+    },
+    "note12": {
+      "type": "string"
+    },
+    "note13": {
+      "type": "string"
+    },
+    "note14": {
+      "type": "string"
+    },
+    "note15": {
+      "type": "string"
+    },
+    "note16": {
+      "type": "string"
+    },
+    "note17": {
+      "type": "string"
+    },
+    "note18": {
+      "type": "string"
+    },
+    "note19": {
+      "type": "string"
+    },
+    "note20": {
+      "type": "string"
+    },
+    "note21": {
+      "type": "string"
+    },
+    "note22": {
+      "type": "string"
+    },
+    "note23": {
+      "type": "string"
+    },
+    "note24": {
+      "type": "string"
+    },
+    "note25": {
+      "type": "string"
+    },
+    "note26": {
+      "type": "string"
+    },
+    "note27": {
+      "type": "string"
+    },
+    "note28": {
+      "type": "string"
+    },
+    "note29": {
+      "type": "string"
+    },
+    "note30": {
+      "type": "string"
+    },
+    "note31": {
+      "type": "string"
+    },
+    "note32": {
+      "type": "string"
+    },
+    "note33": {
+      "type": "string"
+    },
+    "note34": {
+      "type": "string"
+    },
+    "note35": {
+      "type": "string"
+    },
+    "note36": {
+      "type": "string"
+    },
+    "note37": {
+      "type": "string"
+    }
+  }
+}

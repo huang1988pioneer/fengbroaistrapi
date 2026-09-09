@@ -1,0 +1,80 @@
+{
+  "kind": "collectionType",
+  "collectionName": "videos",
+  "info": {
+    "singularName": "video",
+    "pluralName": "videos",
+    "displayName": "video"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "file": {
+      "type": "text"
+    },
+    "filetype": {
+      "type": "string"
+    },
+    "note": {
+      "type": "text"
+    },
+    "ref": {
+      "type": "text"
+    },
+    "category": {
+      "type": "string"
+    },
+    "hash": {
+      "type": "text"
+    },
+    "cover": {
+      "type": "text"
+    },
+    "fileSize": {
+      "type": "biginteger"
+    },
+    "url": {
+      "type": "string"
+    },
+    "img": {
+      "type": "media",
+      "multiple": true,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    },
+    "type": {
+      "type": "string"
+    },
+    "date": {
+      "type": "date"
+    },
+    "song": {
+      "type": "string"
+    },
+    "site": {
+      "type": "string"
+    },
+    "watch": {
+      "type": "string"
+    },
+    "youtube": {
+      "type": "string"
+    },
+    "year": {
+      "type": "integer"
+    },
+    "season": {
+      "type": "string"
+    }
+  }
+}

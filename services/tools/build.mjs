@@ -1,0 +1,10 @@
+import {build} from 'esbuild';
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+const root=path.dirname(fileURLToPath(import.meta.url));
+const walk=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]);
+const files=walk(path.join(root,'app/api')).filter(file=>/route\.(js|ts)$/.test(file));
+await build({entryPoints:files,outdir:path.join(root,'dist'),outbase:path.join(root,'app/api'),bundle:true,platform:'node',format:'cjs',outExtension:{'.js':'.cjs'},target:'node22',packages:'external',alias:{'next/server':path.join(root,'runtime/response.js'),'node-appwrite/file':path.join(root,'runtime/sdk.cjs'),'node-appwrite':path.join(root,'runtime/sdk.cjs'),'@':root},logLevel:'warning'});
+fs.writeFileSync(path.join(root,'dist/routes.json'),JSON.stringify(files.map(file=>path.relative(path.join(root,'app/api'),file).replaceAll('\\','/').replace(/\/route\.(js|ts)$/,''))));
+console.log(`Built ${files.length} API routes`);

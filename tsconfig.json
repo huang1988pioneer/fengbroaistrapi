@@ -1,5 +1,5 @@
 {
-  "include": ["remix.env.d.ts", "**/*.ts", "**/*.tsx"],
+  "include": ["remix.env.d.ts", "app/**/*.ts", "app/**/*.tsx", "components/**/*.tsx", "hooks/**/*.ts", "types/**/*.ts"],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "types": ["@remix-run/node", "vite/client"],
@@ -14,6 +14,7 @@
     "allowJs": false,
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
+    "paths": { "@/*": ["./*"], "next/dynamic": ["./lib/compat/dynamic.tsx"], "next/image": ["./lib/compat/image.tsx"] },
     "skipLibCheck": true,
     "noEmit": true
   }

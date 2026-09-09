@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "trialpurchases",
+  "info": {
+    "singularName": "trialpurchase",
+    "pluralName": "trialpurchases",
+    "displayName": "trialpurchase"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "eventDate": {
+      "type": "datetime"
+    },
+    "firstPurchasePrice": {
+      "type": "integer"
+    },
+    "regularPrice": {
+      "type": "integer"
+    },
+    "account": {
+      "type": "string"
+    },
+    "note": {
+      "type": "text"
+    },
+    "trialStatus": {
+      "type": "string"
+    },
+    "purchaseStatus": {
+      "type": "string"
+    }
+  }
+}

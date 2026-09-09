@@ -1,0 +1,973 @@
+
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  BadgeCheck,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  CircleDollarSign,
+  Copy,
+  Download,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  Upload,
+  Users,
+} from "lucide-react";
+import { BulkDeleteDialog } from "@/components/ui/bulk-delete-dialog";
+import { BulkSelectionControls, SelectionCheckbox } from "@/components/ui/bulk-selection-controls";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { ManagementDeleteDialog } from "@/components/ui/management-delete-dialog";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Textarea } from "@/components/ui/textarea";
+import { fetchApi } from "@/hooks/useApi";
+import { useBulkSelection } from "@/hooks/useBulkSelection";
+import { useManagementCrud } from "@/hooks/useManagementCrud";
+import { deleteByIds } from "@/lib/bulkSelection";
+import { API_ENDPOINTS } from "@/lib/constants";
+import {
+  emptyTrialPurchaseForm,
+  ALL_PURCHASE_STATUS_OPTIONS,
+  LEGACY_PURCHASE_STATUS_OPTIONS,
+  PURCHASE_STATUS_OPTIONS,
+  toTrialPurchaseForm,
+  TRIAL_STATUS_OPTIONS,
+} from "@/lib/managementRecords";
+import {
+  buildTrialPurchaseCsv,
+  parseTrialPurchaseCsv,
+  trialPurchaseImportKey,
+} from "@/lib/trialPurchaseCsv";
+import { cn, getExportFilename } from "@/lib/utils";
+import type {
+  PurchaseStatus,
+  TrialPurchase,
+  TrialPurchaseFormData,
+  TrialStatus,
+} from "@/types";
+
+type AttentionFilter = "all" | "untried" | "trialing" | "not_purchased" | "purchasing";
+
+interface TrialPurchaseManagementProps {
+  onNavigate?: (moduleId: string) => void;
+}
+
+interface ServiceGroup {
+  key: string;
+  name: string;
+  items: TrialPurchase[];
+}
+
+const moneyFormatter = new Intl.NumberFormat("zh-TW", {
+  style: "currency",
+  currency: "TWD",
+  maximumFractionDigits: 0,
+});
+
+function serviceKey(name: string) {
+  return name.trim().toLocaleLowerCase("zh-Hant");
+}
+
+function formatDate(value?: string) {
+  if (!value) return "未設定";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "日期格式錯誤";
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function trialStatusLabel(status: TrialStatus) {
+  return TRIAL_STATUS_OPTIONS.find((option) => option.value === status)?.label || "未試用";
+}
+
+function purchaseStatusLabel(status: PurchaseStatus) {
+  // Looks through the retired options too, so a legacy row still reads as
+  // itself rather than falling back to the wrong label.
+  return ALL_PURCHASE_STATUS_OPTIONS.find((option) => option.value === status)?.label || "無首購";
+}
+
+/**
+ * Done reads as success, in progress as info, not started as something to do.
+ * "無試用" is none of those — nothing is owed, so it stays quiet.
+ */
+function trialStatusTone(status: TrialStatus) {
+  if (status === "tried") return "success" as const;
+  if (status === "trialing") return "info" as const;
+  if (status === "no_trial") return "normal" as const;
+  return "warning" as const;
+}
+
+function purchaseStatusTone(status: PurchaseStatus) {
+  if (status === "purchased") return "success" as const;
+  if (status === "purchasing") return "info" as const;
+  if (status === "unavailable") return "normal" as const;
+  return "warning" as const;
+}
+
+function NativeSelect({
+  id,
+  value,
+  onChange,
+  children,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <select
+      id={id}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-10 w-full rounded-xl border border-input bg-transparent px-3 text-base text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      {children}
+    </select>
+  );
+}
+
+export default function TrialPurchaseManagement({ onNavigate }: TrialPurchaseManagementProps) {
+  const {
+    items,
+    loading,
+    error,
+    fetchAll,
+    create,
+    update,
+    remove,
+    accountVersion,
+  } = useManagementCrud<TrialPurchase>(API_ENDPOINTS.TRIAL_PURCHASE);
+  const [query, setQuery] = useState("");
+  const [attentionFilter, setAttentionFilter] = useState<AttentionFilter>("all");
+  const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set());
+  const [collapsedSearchServices, setCollapsedSearchServices] = useState<Set<string>>(new Set());
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<TrialPurchaseFormData>(() => emptyTrialPurchaseForm());
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<TrialPurchase | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const importCloseTimer = useRef<number | null>(null);
+  const [importPreview, setImportPreview] = useState<{ data: TrialPurchaseFormData[]; errors: string[] } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
+  const [importResult, setImportResult] = useState<{ successCount: number; failCount: number } | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteInput, setBulkDeleteInput] = useState("");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
+  const [bulkTotal, setBulkTotal] = useState(0);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFormOpen(false);
+    setEditingId(null);
+    setForm(emptyTrialPurchaseForm());
+    setActionError(null);
+    setExpandedServices(new Set());
+    setPendingDelete(null);
+    setBulkDeleteOpen(false);
+    setBulkDeleteInput("");
+    setBulkError(null);
+    setImportPreview(null);
+    setImportResult(null);
+    setImporting(false);
+    if (importCloseTimer.current) {
+      window.clearTimeout(importCloseTimer.current);
+      importCloseTimer.current = null;
+    }
+  }, [accountVersion]);
+
+  useEffect(() => () => {
+    if (importCloseTimer.current) window.clearTimeout(importCloseTimer.current);
+  }, []);
+
+  useEffect(() => {
+    if (!formOpen) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById("trial-purchase-form")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editingId, formOpen]);
+
+  const serviceNames = useMemo(
+    () => [...new Set(items.map((item) => item.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-Hant")),
+    [items],
+  );
+
+  const groups = useMemo<ServiceGroup[]>(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase("zh-Hant");
+    const filtered = items.filter((item) => {
+      const matchesQuery = !normalizedQuery || [item.name, item.account, item.note]
+        .some((value) => String(value || "").toLocaleLowerCase("zh-Hant").includes(normalizedQuery));
+      const matchesAttention = attentionFilter === "all"
+        || (attentionFilter === "untried" && item.trialStatus !== "trialing" && item.trialStatus !== "tried" && item.trialStatus !== "no_trial")
+        || (attentionFilter === "trialing" && item.trialStatus === "trialing")
+        || (attentionFilter === "purchasing" && item.purchaseStatus === "purchasing")
+        || (attentionFilter === "not_purchased" && item.purchaseStatus === "not_purchased");
+      return matchesQuery && matchesAttention;
+    });
+
+    const grouped = new Map<string, ServiceGroup>();
+    filtered.forEach((item) => {
+      const key = serviceKey(item.name);
+      const group = grouped.get(key) || { key, name: item.name.trim(), items: [] };
+      group.items.push(item);
+      grouped.set(key, group);
+    });
+
+    return [...grouped.values()]
+      .map((group) => ({
+        ...group,
+        items: group.items.sort((a, b) =>
+          String(a.account || "").localeCompare(String(b.account || ""), "zh-Hant"),
+        ),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+  }, [attentionFilter, items, query]);
+
+  const visibleIds = useMemo(
+    () => groups.flatMap((group) => group.items.map((item) => item.$id).filter(Boolean)),
+    [groups],
+  );
+  const bulk = useBulkSelection(visibleIds);
+  const trialRowCols = bulk.selectionMode
+    ? "xl:grid-cols-[28px_minmax(0,1.1fr)_minmax(9rem,1.6fr)_minmax(0,.8fr)_minmax(0,1.1fr)_minmax(0,.9fr)_136px]"
+    : "xl:grid-cols-[minmax(0,1.1fr)_minmax(9rem,1.6fr)_minmax(0,.8fr)_minmax(0,1.1fr)_minmax(0,.9fr)_136px]";
+
+  const clearBulkSelection = bulk.clear;
+  useEffect(() => {
+    clearBulkSelection();
+  }, [accountVersion, clearBulkSelection]);
+
+  const serviceCount = useMemo(
+    () => new Set(items.map((item) => serviceKey(item.name))).size,
+    [items],
+  );
+  // Anything not explicitly moved along counts as untried, so rows saved
+  // before this field existed still surface as something to do.
+  const untriedCount = items.filter((item) =>
+    item.trialStatus !== "trialing" && item.trialStatus !== "tried" && item.trialStatus !== "no_trial",
+  ).length;
+  const trialingCount = items.filter((item) => item.trialStatus === "trialing").length;
+  const notPurchasedCount = items.filter((item) => item.purchaseStatus === "not_purchased").length;
+  const purchasingCount = items.filter((item) => item.purchaseStatus === "purchasing").length;
+  // Anything not finished on either track still wants attention; a service
+  // that never offered a first purchase is finished as far as buying goes.
+  const pendingCount = items.filter((item) =>
+    (item.trialStatus !== "tried" && item.trialStatus !== "no_trial")
+    || (item.purchaseStatus !== "purchased" && item.purchaseStatus !== "unavailable"),
+  ).length;
+  const pendingDetail = [
+    untriedCount > 0 ? `${untriedCount} 未試用` : "",
+    trialingCount > 0 ? `${trialingCount} 試用中` : "",
+    notPurchasedCount > 0 ? `${notPurchasedCount} 無首購` : "",
+    purchasingCount > 0 ? `${purchasingCount} 首購中` : "",
+  ].filter(Boolean).join(" · ") || "全部完成";
+  const busy = saving || deletingId !== null || importing || bulkDeleting;
+
+  const openCreateForm = (name = "") => {
+    setEditingId(null);
+    setForm(emptyTrialPurchaseForm(name));
+    setActionError(null);
+    setFormOpen(true);
+  };
+
+  const openEditForm = (item: TrialPurchase) => {
+    setEditingId(item.$id);
+    setForm(toTrialPurchaseForm(item));
+    setActionError(null);
+    setFormOpen(true);
+  };
+
+  const openCopyForm = (item: TrialPurchase) => {
+    setEditingId(null);
+    setForm({ ...toTrialPurchaseForm(item), name: `${item.name || "未命名"} (複製)` });
+    setActionError(null);
+    setFormOpen(true);
+  };
+
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditingId(null);
+    setForm(emptyTrialPurchaseForm());
+    setActionError(null);
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy) return;
+    setSaving(true);
+    setActionError(null);
+    try {
+      const result = editingId
+        ? await update(editingId, form)
+        : await create(form);
+      setExpandedServices((current) => new Set(current).add(serviceKey(result.name)));
+      closeForm();
+    } catch (submitError) {
+      setActionError(submitError instanceof Error ? submitError.message : "儲存失敗，請稍後再試。");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSelectAllVisible = () => {
+    if (!bulk.selectionMode) {
+      setExpandedServices(new Set(groups.map((group) => group.key)));
+      setCollapsedSearchServices(new Set());
+    }
+    bulk.selectAll();
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(bulk.selectedIds).filter(Boolean);
+    if (ids.length === 0) return;
+    setBulkDeleting(true);
+    setBulkError(null);
+    setBulkTotal(ids.length);
+    setBulkProgress(0);
+    const { failCount } = await deleteByIds(
+      ids,
+      (id) => fetchApi(`${API_ENDPOINTS.TRIAL_PURCHASE}/${encodeURIComponent(id)}`, { method: "DELETE" }),
+      (done) => setBulkProgress(done),
+    );
+    await fetchAll();
+    setBulkDeleting(false);
+    if (failCount > 0) {
+      setBulkError(`有 ${failCount} 筆刪除失敗，請確認連線後再試。`);
+      return;
+    }
+    bulk.clear();
+    setBulkDeleteOpen(false);
+    setBulkDeleteInput("");
+  };
+
+  const handleDelete = async (item: TrialPurchase) => {
+    if (busy) return;
+    setDeletingId(item.$id);
+    setActionError(null);
+    try {
+      await remove(item.$id);
+      setPendingDelete(null);
+      if (editingId === item.$id) closeForm();
+    } catch (deleteError) {
+      setActionError(deleteError instanceof Error ? deleteError.message : "刪除失敗，請確認連線後再試一次。");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const closeImportPreview = () => {
+    if (importing) return;
+    if (importCloseTimer.current) {
+      window.clearTimeout(importCloseTimer.current);
+      importCloseTimer.current = null;
+    }
+    setImportPreview(null);
+    setImportResult(null);
+    setImportProgress({ current: 0, total: 0 });
+  };
+
+  const exportToCsv = () => {
+    if (busy) return;
+    try {
+      const csv = buildTrialPurchaseCsv(items);
+      const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = getExportFilename("trialpurchase");
+      link.click();
+      URL.revokeObjectURL(link.href);
+      setActionError(null);
+    } catch (exportError) {
+      setActionError(exportError instanceof Error ? exportError.message : "匯出 CSV 失敗");
+    }
+  };
+
+  const handleCsvFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setActionError("請選擇 CSV 檔案");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      if (importCloseTimer.current) {
+        window.clearTimeout(importCloseTimer.current);
+        importCloseTimer.current = null;
+      }
+      setImportResult(null);
+      setActionError(null);
+      setImportPreview(parseTrialPurchaseCsv(text));
+    };
+    reader.onerror = () => setActionError("讀取 CSV 檔案失敗");
+    reader.readAsText(file, "UTF-8");
+  };
+
+  const executeImport = async () => {
+    if (!importPreview || importPreview.data.length === 0 || importPreview.errors.length > 0 || importing) return;
+    setImporting(true);
+    setImportResult(null);
+    setImportProgress({ current: 0, total: importPreview.data.length });
+    let successCount = 0;
+    let failCount = 0;
+    const index = new Map(items.map((item) => [trialPurchaseImportKey(item), item.$id]));
+
+    for (let i = 0; i < importPreview.data.length; i++) {
+      const formData = importPreview.data[i];
+      setImportProgress({ current: i + 1, total: importPreview.data.length });
+      try {
+        const key = trialPurchaseImportKey(formData);
+        const existingId = index.get(key);
+        if (existingId) {
+          await fetchApi(`${API_ENDPOINTS.TRIAL_PURCHASE}/${encodeURIComponent(existingId)}`, {
+            method: "PUT",
+            body: JSON.stringify(formData),
+          });
+        } else {
+          const created = await fetchApi<TrialPurchase>(API_ENDPOINTS.TRIAL_PURCHASE, {
+            method: "POST",
+            body: JSON.stringify(formData),
+          });
+          index.set(key, created.$id);
+        }
+        successCount += 1;
+      } catch {
+        failCount += 1;
+      }
+    }
+
+    try {
+      await fetchAll();
+      setImportResult({ successCount, failCount });
+      if (failCount === 0) {
+        importCloseTimer.current = window.setTimeout(() => {
+          setImportPreview(null);
+          setImportResult(null);
+          setImportProgress({ current: 0, total: 0 });
+          importCloseTimer.current = null;
+        }, 1200);
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const toggleService = (key: string) => {
+    if (query.trim()) {
+      setCollapsedSearchServices((current) => {
+        const next = new Set(current);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      return;
+    }
+    setExpandedServices((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  return (
+    <section className="space-y-6" aria-labelledby="trial-purchase-title">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-3xl">
+          <h1 id="trial-purchase-title" className="font-display text-3xl font-semibold tracking-[-0.03em] text-foreground sm:text-4xl">
+            鋒兄試用／首購
+          </h1>
+          <p className="mt-3 text-base leading-7 text-muted-foreground">
+            依服務集中追蹤每個帳號的試用、首購與試用／首購／到期日（扣款日）；點擊服務名稱即可展開帳號清單。可用 CSV 匯出備份或批次匯入。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={handleCsvFileSelect}
+          />
+          <Button type="button" variant="outline" onClick={() => void fetchAll()} disabled={loading || busy}>
+            <RefreshCw className={loading ? "animate-spin" : ""} />
+            重新整理
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => csvInputRef.current?.click()}
+            disabled={loading || busy}
+            title="從 CSV 匯入試用／首購紀錄（相同服務與帳號會更新）"
+          >
+            <Upload />
+            匯入 CSV
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={exportToCsv}
+            disabled={busy}
+            title="匯出目前全部試用／首購紀錄為 CSV"
+          >
+            <Download />
+            匯出 CSV
+          </Button>
+          <BulkSelectionControls
+            selectionMode={bulk.selectionMode}
+            isAllSelected={bulk.isAllSelected}
+            selectedCount={bulk.selectedCount}
+            visibleCount={visibleIds.length}
+            disabled={loading || busy}
+            onSelectAll={handleSelectAllVisible}
+            onClear={bulk.clear}
+            onDeleteSelected={() => { setBulkError(null); setBulkDeleteInput(""); setBulkDeleteOpen(true); }}
+          />
+          <Button type="button" onClick={() => openCreateForm()} disabled={loading || busy}>
+            <Plus />
+            新增紀錄
+          </Button>
+        </div>
+      </header>
+
+      <div className="surface-inset grid grid-cols-3 divide-x divide-[var(--line-soft)] overflow-hidden rounded-2xl">
+        <SummaryValue label="服務" value={serviceCount} icon={<BadgeCheck />} />
+        <SummaryValue label="帳號紀錄" value={items.length} icon={<Users />} />
+        <SummaryValue
+          label="待處理帳號"
+          value={pendingCount}
+          detail={pendingDetail}
+          icon={<CircleDollarSign />}
+        />
+      </div>
+
+      {formOpen ? (
+        <form id="trial-purchase-form" onSubmit={handleSubmit} className="surface-raised scroll-mt-28 rounded-2xl p-4 sm:p-6">
+          <div>
+            <div>
+              <h2 className="font-display text-xl font-semibold text-foreground">
+                {editingId ? "編輯帳號紀錄" : "新增帳號紀錄"}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">同一服務可建立多筆帳號，清單會自動歸在一起。</p>
+            </div>
+          </div>
+
+          <fieldset disabled={busy} className="mt-5 grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <FormField label="服務名稱" htmlFor="trial-service-name" required>
+              <Input
+                id="trial-service-name"
+                maxLength={100}
+                list="trial-purchase-services"
+                value={form.name}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="例如 ChatGPT"
+                required
+                autoFocus
+              />
+              <datalist id="trial-purchase-services">
+                {serviceNames.map((name) => <option key={name} value={name} />)}
+              </datalist>
+            </FormField>
+            <FormField label="帳號" htmlFor="trial-account">
+              <Input
+                id="trial-account"
+                maxLength={200}
+                value={form.account || ""}
+                onChange={(event) => setForm((current) => ({ ...current, account: event.target.value }))}
+                placeholder="Email、使用者名稱或辨識名稱"
+              />
+            </FormField>
+            <FormField label="試用／首購／到期日（扣款日）" htmlFor="trial-event-date">
+              <Input
+                id="trial-event-date"
+                type="date"
+                value={form.eventDate || ""}
+                onChange={(event) => setForm((current) => ({ ...current, eventDate: event.target.value }))}
+              />
+            </FormField>
+            <FormField label="首購價格（NT$）" htmlFor="trial-first-price">
+              <Input
+                id="trial-first-price"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={form.firstPurchasePrice}
+                onChange={(event) => setForm((current) => ({ ...current, firstPurchasePrice: Number(event.target.value) || 0 }))}
+              />
+            </FormField>
+            <FormField label="非首購價格（NT$）" htmlFor="trial-regular-price">
+              <Input
+                id="trial-regular-price"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={form.regularPrice}
+                onChange={(event) => setForm((current) => ({ ...current, regularPrice: Number(event.target.value) || 0 }))}
+              />
+            </FormField>
+            <FormField label="試用狀態" htmlFor="trial-status">
+              <NativeSelect
+                id="trial-status"
+                value={form.trialStatus}
+                onChange={(value) => setForm((current) => ({ ...current, trialStatus: value as TrialStatus }))}
+              >
+                {TRIAL_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </NativeSelect>
+            </FormField>
+            <FormField label="首購狀態" htmlFor="purchase-status">
+              <NativeSelect
+                id="purchase-status"
+                value={form.purchaseStatus}
+                onChange={(value) => setForm((current) => ({ ...current, purchaseStatus: value as PurchaseStatus }))}
+              >
+                {PURCHASE_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                {/* A row still on a retired value keeps it visible and
+                    selected; otherwise the picker would silently rewrite it to
+                    the first option on the next save. */}
+                {LEGACY_PURCHASE_STATUS_OPTIONS
+                  .filter((option) => option.value === form.purchaseStatus)
+                  .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </NativeSelect>
+            </FormField>
+            <FormField label="備註" htmlFor="trial-note" className="sm:col-span-2 xl:col-span-2">
+              <Textarea
+                id="trial-note"
+                maxLength={3337}
+                value={form.note || ""}
+                onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))}
+                placeholder="方案限制、付款方式或其他提醒"
+              />
+            </FormField>
+          </fieldset>
+
+          {actionError ? <ErrorMessage>{actionError}</ErrorMessage> : null}
+          <div className="mt-5 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={closeForm} disabled={saving}>取消</Button>
+            <Button type="submit" disabled={busy}>
+              {saving ? <RefreshCw className="animate-spin" /> : null}
+              {saving ? "儲存中…" : editingId ? "儲存變更" : "新增紀錄"}
+            </Button>
+          </div>
+        </form>
+      ) : null}
+
+      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+        <label className="relative min-w-0 flex-1">
+          <span className="sr-only">搜尋服務、帳號或備註</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setCollapsedSearchServices(new Set());
+            }}
+            className="pl-9"
+            placeholder="搜尋服務、帳號或備註"
+          />
+        </label>
+        <label className="w-full md:w-48">
+          <span className="sr-only">待處理狀態</span>
+          <NativeSelect id="trial-attention-filter" value={attentionFilter} onChange={(value) => setAttentionFilter(value as AttentionFilter)}>
+            <option value="all">全部狀態</option>
+            <option value="untried">未試用</option>
+            <option value="trialing">試用中</option>
+            <option value="not_purchased">無首購</option>
+            <option value="purchasing">首購中</option>
+          </NativeSelect>
+        </label>
+      </div>
+
+      {error ? (
+        <div role="alert" className="rounded-2xl border border-destructive/25 bg-destructive/8 p-4 text-sm text-destructive">
+          <p className="font-semibold">無法載入試用／首購資料</p>
+          <p className="mt-1 leading-6">{error}</p>
+          {onNavigate && error.includes("trialpurchase") ? (
+            <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => onNavigate("settings")}>前往鋒兄設定</Button>
+          ) : null}
+        </div>
+      ) : null}
+      {!formOpen && actionError ? <ErrorMessage>{actionError}</ErrorMessage> : null}
+
+      {loading && items.length === 0 ? (
+        <LoadingSpinner text="載入試用／首購資料…" className="min-h-48" />
+      ) : error && items.length === 0 ? null : groups.length === 0 ? (
+        <EmptyState
+          icon={<Users className="size-7 text-muted-foreground" />}
+          title={items.length === 0 ? "尚無試用／首購紀錄" : "沒有符合條件的帳號"}
+          description={items.length === 0 ? "先新增第一個服務與帳號，之後可在服務底下持續加入帳號。" : "調整搜尋文字或狀態篩選後再試一次。"}
+          action={items.length === 0 ? <Button type="button" onClick={() => openCreateForm()}><Plus />新增第一筆</Button> : undefined}
+        />
+      ) : (
+        <div className="space-y-3">
+          {groups.map((group) => {
+            const isOpen = query.trim() ? !collapsedSearchServices.has(group.key) : expandedServices.has(group.key);
+            const groupUntried = group.items.filter((item) =>
+              item.trialStatus !== "trialing" && item.trialStatus !== "tried" && item.trialStatus !== "no_trial",
+            ).length;
+            const groupTrialing = group.items.filter((item) => item.trialStatus === "trialing").length;
+            const groupUnpurchased = group.items.filter((item) => item.purchaseStatus === "not_purchased").length;
+            const groupPurchasing = group.items.filter((item) => item.purchaseStatus === "purchasing").length;
+            return (
+              <section key={group.key} className="surface-inset overflow-hidden rounded-2xl">
+                <div className="flex items-center gap-2 p-3 sm:p-4">
+                  {bulk.selectionMode ? (
+                    <SelectionCheckbox
+                      checked={group.items.length > 0 && group.items.every((item) => bulk.isSelected(item.$id))}
+                      onChange={() => {
+                        const ids = group.items.map((item) => item.$id).filter(Boolean);
+                        const allSelected = ids.length > 0 && ids.every((id) => bulk.isSelected(id));
+                        bulk.toggleMany(ids, !allSelected);
+                      }}
+                      label={`選取 ${group.name} 全部帳號`}
+                      disabled={busy || loading}
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => toggleService(group.key)}
+                    aria-expanded={isOpen}
+                    aria-controls={`trial-accounts-${encodeURIComponent(group.key)}`}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2 text-left outline-none transition-colors hover:bg-accent/10 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent-strong">
+                      <Users className="size-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words text-lg font-semibold text-foreground">{group.name}</span>
+                      <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                        <span>{group.items.length} 個帳號</span>
+                        {groupUntried > 0 ? <span>{groupUntried} 未試用</span> : null}
+                        {groupTrialing > 0 ? <span>{groupTrialing} 試用中</span> : null}
+                        {groupUnpurchased > 0 ? <span>{groupUnpurchased} 無首購</span> : null}
+                        {groupPurchasing > 0 ? <span>{groupPurchasing} 首購中</span> : null}
+                      </span>
+                    </span>
+                    {isOpen ? <ChevronUp className="shrink-0" /> : <ChevronDown className="shrink-0" />}
+                  </button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => openCreateForm(group.name)} disabled={busy || loading} aria-label={`新增 ${group.name} 帳號`}>
+                    <Plus />
+                    <span className="hidden sm:inline">新增帳號</span>
+                  </Button>
+                </div>
+
+                {isOpen ? (
+                  <div id={`trial-accounts-${encodeURIComponent(group.key)}`} className="border-t border-[var(--line-soft)]">
+                    <div className={cn("hidden gap-4 border-b border-[var(--line-soft)] px-5 py-2 text-xs font-semibold leading-5 text-muted-foreground xl:grid", trialRowCols)}>
+                      {bulk.selectionMode ? <span className="sr-only">選取</span> : null}
+                      <span>帳號</span><span>試用／首購／到期日（扣款日）</span><span>價格</span><span>狀態</span><span>備註</span><span>操作</span>
+                    </div>
+                    <div className="divide-y divide-[var(--line-soft)]">
+                      {group.items.map((item) => (
+                        <div key={item.$id} className={cn("grid gap-4 px-4 py-4 sm:grid-cols-2 xl:items-center xl:px-5", trialRowCols, bulk.selectionMode && bulk.isSelected(item.$id) && "bg-destructive/5")}>
+                          {bulk.selectionMode ? (
+                            <div className="flex items-center">
+                              <SelectionCheckbox
+                                checked={bulk.isSelected(item.$id)}
+                                onChange={() => bulk.toggle(item.$id)}
+                                label={`選取 ${group.name} ${item.account || "帳號"}`}
+                                disabled={busy || loading}
+                              />
+                            </div>
+                          ) : null}
+                          <Cell label="帳號"><span className="break-all font-medium text-foreground">{item.account?.trim() || "未填帳號"}</span></Cell>
+                          <Cell label="試用／首購／到期日（扣款日）"><span className="inline-flex items-center gap-2 text-sm text-foreground"><CalendarDays className="size-4 shrink-0 text-muted-foreground" />{formatDate(item.eventDate)}</span></Cell>
+                          <Cell label="價格">
+                            <div className="space-y-1 text-sm tabular-nums">
+                              <p><span className="text-muted-foreground">首購 </span>{moneyFormatter.format(item.firstPurchasePrice || 0)}</p>
+                              <p><span className="text-muted-foreground">一般 </span>{moneyFormatter.format(item.regularPrice || 0)}</p>
+                            </div>
+                          </Cell>
+                          <Cell label="狀態">
+                            <div className="flex flex-wrap gap-1.5">
+                              <StatusBadge status={trialStatusTone(item.trialStatus)}>{trialStatusLabel(item.trialStatus)}</StatusBadge>
+                              <StatusBadge status={purchaseStatusTone(item.purchaseStatus)}>{purchaseStatusLabel(item.purchaseStatus)}</StatusBadge>
+                            </div>
+                          </Cell>
+                          <Cell label="備註"><p className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{item.note?.trim() || "—"}</p></Cell>
+                          <div className="flex items-center justify-end gap-1 xl:justify-start">
+                            <Button type="button" variant="ghost" size="icon" onClick={() => openEditForm(item)} disabled={busy || loading} aria-label={`編輯 ${group.name} ${item.account || "帳號"}`}><Pencil /></Button>
+                            <Button type="button" variant="ghost" size="icon" onClick={() => openCopyForm(item)} disabled={busy || loading} aria-label={`複製 ${group.name} ${item.account || "帳號"}`} title="複製此帳號紀錄（預先填好欄位，供你確認後新增）"><Copy /></Button>
+                            <Button type="button" variant="ghost" size="icon" onClick={() => { setActionError(null); setPendingDelete(item); }} disabled={busy || loading} aria-label={`刪除 ${group.name} ${item.account || "帳號"}`} className="text-destructive hover:text-destructive"><Trash2 /></Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            );
+          })}
+        </div>
+      )}
+      <ManagementDeleteDialog
+        open={pendingDelete !== null}
+        recordName={pendingDelete ? `${pendingDelete.name}／${pendingDelete.account?.trim() || "未填帳號"}` : ""}
+        busy={deletingId !== null}
+        error={actionError}
+        onCancel={() => { setPendingDelete(null); setActionError(null); }}
+        onConfirm={() => { if (pendingDelete) void handleDelete(pendingDelete); }}
+      />
+      <BulkDeleteDialog
+        open={bulkDeleteOpen}
+        count={bulk.selectedCount}
+        noun="試用／首購紀錄"
+        confirmPhrase="DELETE trial-purchase"
+        busy={bulkDeleting}
+        progress={bulkProgress}
+        total={bulkTotal}
+        error={bulkError}
+        confirmInput={bulkDeleteInput}
+        onConfirmInputChange={setBulkDeleteInput}
+        onCancel={() => { if (!bulkDeleting) { setBulkDeleteOpen(false); setBulkDeleteInput(""); setBulkError(null); } }}
+        onConfirm={() => { void handleBulkDelete(); }}
+      />
+      {importPreview ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-foreground/35 p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeImportPreview();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trial-purchase-csv-import-title"
+            className="surface-raised flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl"
+          >
+            <div className="border-b border-[var(--line-soft)] p-5 sm:p-6">
+              <h2 id="trial-purchase-csv-import-title" className="font-display text-xl font-semibold text-foreground">
+                匯入 CSV 預覽
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                相同服務名稱與帳號會更新既有紀錄，其餘新增。有格式錯誤時不會寫入。
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+              {importResult ? (
+                <div className="mb-4 rounded-xl bg-accent/10 px-3 py-2 text-sm text-foreground">
+                  <p className="font-semibold">匯入完成</p>
+                  <p className="mt-1">成功 {importResult.successCount} 筆 · 失敗 {importResult.failCount} 筆</p>
+                </div>
+              ) : null}
+              {importPreview.errors.length > 0 ? (
+                <div role="alert" className="mb-4 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <p className="font-semibold">格式錯誤</p>
+                  <ul className="mt-1 space-y-1">
+                    {importPreview.errors.map((error, index) => (
+                      <li key={`${index}-${error}`}>• {error}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {importPreview.data.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-foreground">將匯入 {importPreview.data.length} 筆</p>
+                  {importPreview.data.map((item, index) => {
+                    const existing = items.some((current) => trialPurchaseImportKey(current) === trialPurchaseImportKey(item));
+                    return (
+                      <div key={`${item.name}-${item.account || ""}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-accent/8 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground">{item.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">{item.account?.trim() || "未填帳號"}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${existing ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200"}`}>
+                          {existing ? "更新" : "新增"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">沒有可匯入的資料列。</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-3 border-t border-[var(--line-soft)] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:flex-row sm:justify-end sm:p-6">
+              {importing ? (
+                <div className="flex w-full items-center gap-3">
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full bg-accent transition-all"
+                      style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                  <span className="text-sm tabular-nums text-muted-foreground">
+                    {importProgress.current}/{importProgress.total}
+                  </span>
+                </div>
+              ) : importResult ? (
+                <Button type="button" variant="outline" onClick={closeImportPreview}>完成</Button>
+              ) : (
+                <>
+                  <Button type="button" variant="outline" onClick={closeImportPreview}>取消</Button>
+                  <Button
+                    type="button"
+                    onClick={() => void executeImport()}
+                    disabled={importPreview.data.length === 0 || importPreview.errors.length > 0}
+                  >
+                    確認匯入（{importPreview.data.length} 筆）
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SummaryValue({ label, value, detail, icon }: { label: string; value: number; detail?: string; icon: React.ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-2 px-3 py-3 sm:flex-row sm:items-center sm:gap-3 sm:px-5 sm:py-4">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent-strong sm:size-10 [&_svg]:size-4 sm:[&_svg]:size-5">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="mt-0.5 text-2xl font-semibold tabular-nums text-foreground">{value}</p>
+        {detail ? <p className="hidden truncate text-xs text-muted-foreground sm:block">{detail}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function FormField({ label, htmlFor, required, className, children }: { label: string; htmlFor: string; required?: boolean; className?: string; children: React.ReactNode }) {
+  return (
+    <div className={className}>
+      <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-foreground">
+        {label}{required ? <span className="ml-1 text-destructive">*</span> : null}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function Cell({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="mb-1 text-xs font-semibold text-muted-foreground xl:hidden">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function ErrorMessage({ children }: { children: React.ReactNode }) {
+  return <p role="alert" className="mt-4 rounded-xl bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">{children}</p>;
+}

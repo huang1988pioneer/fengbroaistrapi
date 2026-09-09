@@ -1,0 +1,26 @@
+{
+  "kind": "collectionType",
+  "collectionName": "pushsubscriptions",
+  "info": {
+    "singularName": "pushsubscription",
+    "pluralName": "pushsubscriptions",
+    "displayName": "pushsubscription"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "endpoint": {
+      "type": "text",
+      "required": true
+    },
+    "p256dh": {
+      "type": "text",
+      "required": true
+    },
+    "auth": {
+      "type": "text",
+      "required": true
+    }
+  }
+}

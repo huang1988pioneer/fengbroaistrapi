@@ -1,0 +1,46 @@
+{
+  "kind": "collectionType",
+  "collectionName": "shoppinglists",
+  "info": {
+    "singularName": "shoppinglist",
+    "pluralName": "shoppinglists",
+    "displayName": "shoppinglist"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "plannedDate": {
+      "type": "datetime"
+    },
+    "price": {
+      "type": "integer"
+    },
+    "currency": {
+      "type": "string"
+    },
+    "quantity": {
+      "type": "integer"
+    },
+    "shop": {
+      "type": "string"
+    },
+    "pickupMethod": {
+      "type": "string"
+    },
+    "imageUrl": {
+      "type": "string"
+    },
+    "account": {
+      "type": "string"
+    },
+    "note": {
+      "type": "text"
+    }
+  }
+}

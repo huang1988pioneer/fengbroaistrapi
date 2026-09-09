@@ -1,0 +1,53 @@
+{
+  "kind": "collectionType",
+  "collectionName": "banks",
+  "info": {
+    "singularName": "bank",
+    "pluralName": "banks",
+    "displayName": "bank"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "deposit": {
+      "type": "integer"
+    },
+    "site": {
+      "type": "string"
+    },
+    "address": {
+      "type": "richtext"
+    },
+    "withdrawals": {
+      "type": "integer"
+    },
+    "transfer": {
+      "type": "integer"
+    },
+    "activity": {
+      "type": "string"
+    },
+    "card": {
+      "type": "string"
+    },
+    "account": {
+      "type": "string"
+    },
+    "cardimg": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    }
+  }
+}

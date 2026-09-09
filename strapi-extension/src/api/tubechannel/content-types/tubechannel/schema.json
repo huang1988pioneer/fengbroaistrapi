@@ -1,0 +1,22 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tubechannels",
+  "info": {
+    "singularName": "tubechannel",
+    "pluralName": "tubechannels",
+    "displayName": "tubechannel"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "sourceUrl": {
+      "type": "text",
+      "required": true
+    },
+    "alias": {
+      "type": "string"
+    }
+  }
+}

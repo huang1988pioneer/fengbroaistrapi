@@ -1,0 +1,39 @@
+{
+  "kind": "collectionType",
+  "collectionName": "fengbro_news_sources",
+  "info": {
+    "singularName": "fengbro-news-source",
+    "pluralName": "fengbro-news-sources",
+    "displayName": "FengbroNews"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "sourceId": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "name": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "homeUrl": {
+      "type": "text"
+    },
+    "adapter": {
+      "type": "string"
+    },
+    "searchUrlTemplate": {
+      "type": "text"
+    },
+    "locked": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

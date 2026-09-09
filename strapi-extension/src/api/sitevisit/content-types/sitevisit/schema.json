@@ -1,0 +1,27 @@
+{
+  "kind": "collectionType",
+  "collectionName": "sitevisits",
+  "info": {
+    "singularName": "sitevisit",
+    "pluralName": "sitevisits",
+    "displayName": "sitevisit"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "count": {
+      "type": "integer"
+    },
+    "lastVisitAt": {
+      "type": "datetime"
+    },
+    "currentStreak": {
+      "type": "integer"
+    },
+    "lastVisitDate": {
+      "type": "string"
+    }
+  }
+}

@@ -8,6 +8,7 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 import stylesheet from "./styles.css?url";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: stylesheet },
@@ -56,5 +57,5 @@ export function HydrateFallback() {
 }
 
 export default function App() {
-  return <Outlet />;
+  return <ThemeProvider defaultTheme="system" defaultDensity="comfortable" storageKey="ui-theme" densityStorageKey="ui-density"><Outlet /></ThemeProvider>;
 }

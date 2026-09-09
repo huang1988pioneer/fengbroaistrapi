@@ -1,0 +1,76 @@
+{
+  "kind": "collectionType",
+  "collectionName": "quotas",
+  "info": {
+    "singularName": "quota",
+    "pluralName": "quotas",
+    "displayName": "quota"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "serviceType": {
+      "type": "string"
+    },
+    "account": {
+      "type": "string"
+    },
+    "quotaRemaining": {
+      "type": "integer"
+    },
+    "quotaPoints": {
+      "type": "integer"
+    },
+    "litmediaAccount": {
+      "type": "string"
+    },
+    "pointsSyncedAt": {
+      "type": "datetime"
+    },
+    "quotaRatio": {
+      "type": "integer"
+    },
+    "quotaExpiry": {
+      "type": "datetime"
+    },
+    "usageSyncedAt": {
+      "type": "datetime"
+    },
+    "ratio5h": {
+      "type": "integer"
+    },
+    "expiry5h": {
+      "type": "string"
+    },
+    "ratioWeek": {
+      "type": "integer"
+    },
+    "expiryWeek": {
+      "type": "string"
+    },
+    "ratioMonth": {
+      "type": "integer"
+    },
+    "expiryMonth": {
+      "type": "string"
+    },
+    "resetCreditsBalance": {
+      "type": "integer"
+    },
+    "resetCreditsExpiry": {
+      "type": "string"
+    },
+    "note": {
+      "type": "text"
+    },
+    "accessToken": {
+      "type": "text"
+    }
+  }
+}

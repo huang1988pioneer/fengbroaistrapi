@@ -1,0 +1,41 @@
+
+import { cn } from "@/lib/utils";
+
+interface LoadingSpinnerProps {
+  size?: "sm" | "md" | "lg";
+  text?: string;
+  className?: string;
+}
+
+const sizeStyles = {
+  sm: "w-6 h-6 border-2",
+  md: "w-10 h-10 border-3",
+  lg: "w-16 h-16 border-4",
+};
+
+export function LoadingSpinner({ size = "md", text, className }: LoadingSpinnerProps) {
+  return (
+    <div className={cn("flex flex-col items-center justify-center gap-3", className)}>
+      <div
+        className={cn(
+          "border-[var(--accent)] border-t-transparent rounded-full animate-spin",
+          sizeStyles[size]
+        )}
+      />
+      {text && <p className="text-[var(--muted-foreground)] text-sm">{text}</p>}
+    </div>
+  );
+}
+
+// 全頁載入狀態
+interface FullPageLoadingProps {
+  text?: string;
+}
+
+export function FullPageLoading({ text = "載入中..." }: FullPageLoadingProps) {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <LoadingSpinner size="lg" text={text} />
+    </div>
+  );
+}

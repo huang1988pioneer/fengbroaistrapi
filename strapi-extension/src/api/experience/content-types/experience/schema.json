@@ -1,0 +1,28 @@
+{
+  "kind": "collectionType",
+  "collectionName": "experiences",
+  "info": {
+    "singularName": "experience",
+    "pluralName": "experiences",
+    "displayName": "experience"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "unique": true
+    },
+    "year": {
+      "type": "integer"
+    },
+    "gov": {
+      "type": "string"
+    },
+    "site": {
+      "type": "string"
+    }
+  }
+}

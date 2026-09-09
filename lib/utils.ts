@@ -1,0 +1,234 @@
+import { getConnection } from "@/lib/strapi/config";
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+/**
+ * 生成匯出檔案名稱
+ * 格式：appwrite-{nickname}-{tableName}-{YYYYMMDD}.{ext}
+ */
+export function getExportFilename(tableName: string, ext: string = 'csv'): string {
+  const nickname = typeof window !== 'undefined'
+    ? (localStorage.getItem('APPWRITE_ACCOUNT_NICKNAME') || '')
+    : '';
+  const now = new Date();
+  const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const parts = ['appwrite', nickname, tableName, date].filter(Boolean);
+  return `${parts.join('-')}.${ext}`;
+}
+
+// Appwrite 動態配置
+export function getAppwriteConfig() {
+ const c=getConnection();
+ return {endpoint:c.url,apiKey:c.token,projectId:'strapi',databaseId:'strapi',bucketId:'uploads'};
+}
+export function hasRequiredAppwriteConfig(options: {requireBucket?:boolean;requireApiKey?:boolean} = {}) {
+ const c=getConnection(); return Boolean(c.url && (!options.requireApiKey || c.token));
+}
+
+// 獲取上傳用的 headers（包含 Appwrite 配置）
+export function getAppwriteHeaders() {
+  const config = getAppwriteConfig();
+  return {
+    'x-appwrite-endpoint': config.endpoint,
+    'x-appwrite-project': config.projectId,
+    'x-appwrite-bucket': config.bucketId,
+    'x-appwrite-key': config.apiKey,
+  };
+}
+
+/**
+ * 獲取經過代理的媒體 URL，解決 Appwrite 直連無法跳轉時間軸的問題
+ * @param url 原始媒體 URL
+ * @returns 代理後的 URL
+ */
+export function getProxiedMediaUrl(url: string | undefined | null): string {
+  if (!url) return '';
+
+  // 如果已經是代理 URL，或者是 blob URL，則直接返回
+  if (url.includes('/api/media-proxy') || url.startsWith('blob:')) {
+    return url;
+  }
+
+  // 檢查是否為 Appwrite 的 Storage URL
+  // 支持絕對路徑 (http...) 和相對路徑 (/v1/...)
+  const isAppwriteStorage = url.includes('/storage/buckets/');
+
+  if (!isAppwriteStorage) {
+    return url;
+  }
+
+  const config = getAppwriteConfig();
+  let absoluteUrl = url;
+
+  // 如果是相對路徑，補全端點
+  if (url.startsWith('/') && config.endpoint) {
+    const baseUrl = config.endpoint.endsWith('/') ? config.endpoint.slice(0, -1) : config.endpoint;
+    // 如果 URL 已經包含 /v1 且 endpoint 也包含 /v1，要避免重複
+    if (url.startsWith('/v1/') && baseUrl.endsWith('/v1')) {
+      absoluteUrl = `${baseUrl.slice(0, -3)}${url}`;
+    } else {
+      absoluteUrl = `${baseUrl}${url}`;
+    }
+  }
+
+  const params = new URLSearchParams();
+  params.set('url', absoluteUrl);
+
+  // 只有當有 API Key 且不是 'undefined'/'null' 時才添加
+  if (config.apiKey && config.apiKey !== 'undefined' && config.apiKey !== 'null') {
+    params.set('_key', config.apiKey);
+  }
+
+  // Add project ID for public access fallback
+  if (config.projectId && config.projectId !== 'undefined' && config.projectId !== 'null') {
+    params.set('_project', config.projectId);
+  }
+
+  return `/api/media-proxy?${params.toString()}`;
+}
+
+export function getProxiedMediaDownloadUrl(
+  url: string | undefined | null,
+  filename?: string | null
+): string {
+  if (!url) return '';
+
+  const proxiedUrl = getProxiedMediaUrl(getAppwriteDownloadUrl(url));
+  if (!proxiedUrl) return '';
+
+  const separator = proxiedUrl.includes('?') ? '&' : '?';
+  const params = new URLSearchParams();
+  params.set('download', '1');
+
+  if (filename) {
+    params.set('filename', filename);
+  }
+
+  return `${proxiedUrl}${separator}${params.toString()}`;
+}
+
+/**
+ * 獲取 Appwrite 的下載 URL（強制下載而非在瀏覽器預覽）
+ * @param url 原始 URL
+ * @returns 強制下載的 URL
+ */
+export function getAppwriteDownloadUrl(url: string | undefined | null): string {
+  if (!url) return '';
+
+  // 如果是 Strapi 媒體庫 URL 且包含 /view，將其替換為 /download
+  if (url.includes('/storage/buckets/') && url.includes('/view')) {
+    return url.replace('/view', '/download');
+  }
+
+  return url;
+}
+
+/**
+ * Build a playback URL for multipart videos so the browser sees a single
+ * range-capable stream instead of raw PART files.
+ */
+export function getMultipartVideoPlaybackUrl(manifestUrl: string | undefined | null): string {
+  if (!manifestUrl) return '';
+
+  const params = new URLSearchParams();
+  params.set('manifestUrl', getAppwriteDownloadUrl(manifestUrl));
+
+  const config = getAppwriteConfig();
+  if (config.apiKey && config.apiKey !== 'undefined' && config.apiKey !== 'null') {
+    params.set('_key', config.apiKey);
+  }
+  if (config.projectId && config.projectId !== 'undefined' && config.projectId !== 'null') {
+    params.set('_project', config.projectId);
+  }
+
+  return `/api/multipart-video?${params.toString()}`;
+}
+
+export function getMultipartVideoDownloadUrl(
+  manifestUrl: string | undefined | null,
+  filename?: string | null
+): string {
+  if (!manifestUrl) return '';
+
+  const params = new URLSearchParams();
+  params.set('manifestUrl', getAppwriteDownloadUrl(manifestUrl));
+  params.set('download', '1');
+
+  if (filename) {
+    params.set('filename', filename);
+  }
+
+  const config = getAppwriteConfig();
+  if (config.apiKey && config.apiKey !== 'undefined' && config.apiKey !== 'null') {
+    params.set('_key', config.apiKey);
+  }
+  if (config.projectId && config.projectId !== 'undefined' && config.projectId !== 'null') {
+    params.set('_project', config.projectId);
+  }
+
+  return `/api/multipart-video?${params.toString()}`;
+}
+
+/**
+ * 獲取當前 Strapi 帳號的友善顯示名稱
+ * - 使用 .env 配置時返回 "appwrite-.env"
+ * - 使用自定義配置時返回 "appwrite-{nickname}" 或 "appwrite-custom"
+ */
+export function getCurrentAccountLabel(): string {return 'Strapi · '+(getConnection().nickname || '預設連線');}
+
+// 清除所有快取（用於 Strapi 帳號切換）
+export function clearAllCaches() {
+  if (typeof window === 'undefined') return;
+
+  // 1. 清除 localStorage 中的所有快取相關 key
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && (
+      key.includes('_refresh_key') ||
+      key.includes('crud_') ||
+      key === 'appwrite_account_switched'
+    )) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach(key => localStorage.removeItem(key));
+
+  // 2. 清除 useCrud 的內存快取
+  if ((window as any).__crudCache) {
+    (window as any).__crudCache.clear();
+  }
+
+  // 3. 強制清除模組級快取（透過設定特殊 flag）
+  const timestamp = Date.now().toString();
+  localStorage.setItem('appwrite_account_switched', timestamp);
+
+  // 4. 強制所有 hooks 重新載入（設定 refresh keys）
+  const modules = [
+    'subscriptions',
+    'foods',
+    'banks',
+    'articles',
+    'images',
+    'music',
+    'videos',
+    'podcast',
+    'commondocument',
+    'dashboard',
+  ];
+
+  modules.forEach(module => {
+    localStorage.setItem(`${module}_refresh_key`, timestamp);
+  });
+
+  // 5. 同頁事件通知（localStorage 變更不會觸發同頁 storage event）
+  window.dispatchEvent(
+    new CustomEvent("fengbro:data-refresh", {
+      detail: { key: "*", timestamp: Number(timestamp) },
+    })
+  );
+}

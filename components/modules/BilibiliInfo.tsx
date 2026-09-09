@@ -1,0 +1,5 @@
+import ServiceInfo from "@/components/modules/ServiceInfo";
+
+export default function BilibiliInfo() {
+  return <ServiceInfo project={{ name: "Bilibili", description: "Bilibili 平台資訊與每日任務使用說明", serviceUrl: "https://www.bilibili.com", serviceLabel: "開啟 Bilibili", repositoryUrl: "https://github.com/huang1988pioneer/CronBilibiliMission", runUrl: "https://github.com/huang1988pioneer/CronBilibiliMission/actions/runs/31590409377", workflowName: "Bilibili Daily Experience Tasks", runNumber: 585, completedAt: "2026-08-12 19:07（台北時間）", status: "success", overview: "Bilibili 是以動畫、遊戲、知識與創作影片為核心的影音社群；內容包含創作者上傳影片、直播與會員內容。平台的彈幕互動會隨影片時間軸顯示，適合追蹤頻道、觀看系列內容與參與社群討論。", capabilities: ["搜尋與追蹤創作者、收藏影片及建立稍後觀看清單。", "觀看 UGC 與授權影音內容；部分內容、畫質或權益依帳戶與地區而異。", "在影片時間軸上閱讀或發送彈幕，並用留言、投幣、按讚等方式互動。", "使用創作者中心管理上傳內容、資料與社群互動（需符合平台規範）。"], steps: ["登入個人帳戶後，先確認所在地區可用內容、會員狀態與通知設定。", "從首頁、搜尋或已追蹤頻道開啟影片；需要稍後觀看的內容先加入清單。", "互動前留意影片說明、授權與社群規範，避免散布未授權素材。", "若使用每日任務，先以平台頁面結果為準，再查看鋒兄工作流紀錄。"], automationScope: "工作流執行每日經驗／任務流程；它只回報自動化執行結果，並不代表帳戶一定取得特定獎勵或可存取所有內容。", caution: "請勿將帳密、Cookie 或 API 金鑰寫入頁面或版本庫；會員權益、地區限制及任務規則以 Bilibili 當下頁面為準。" }} />;
+}

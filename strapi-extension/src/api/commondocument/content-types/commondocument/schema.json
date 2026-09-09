@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "commondocuments",
+  "info": {
+    "singularName": "commondocument",
+    "pluralName": "commondocuments",
+    "displayName": "commondocument"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "file": {
+      "type": "text"
+    },
+    "filetype": {
+      "type": "string"
+    },
+    "note": {
+      "type": "text"
+    },
+    "ref": {
+      "type": "text"
+    },
+    "category": {
+      "type": "string"
+    },
+    "hash": {
+      "type": "text"
+    },
+    "cover": {
+      "type": "text"
+    }
+  }
+}
