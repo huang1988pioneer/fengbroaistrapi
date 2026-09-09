@@ -1178,93 +1178,6 @@ export default function Index() {
           ) : null}
 
           <section className="content-grid">
-            <div className="table-panel">
-              <div className="toolbar">
-                <label className="search-box">
-                  <Search size={16} />
-                  <input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder={`搜尋 ${activeModule.label}`}
-                  />
-                </label>
-                <div className="toolbar-actions">
-                  <input
-                    ref={fileRef}
-                    className="file-input"
-                    type="file"
-                    accept=".csv,text/csv"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void importCsv(file);
-                    }}
-                  />
-                  <button type="button" className="tool-button" onClick={() => fileRef.current?.click()} disabled={loading}>
-                    <Upload size={16} />
-                    匯入 CSV
-                  </button>
-                  <button type="button" className="tool-button" onClick={exportCsv} disabled={loading}>
-                    <Download size={16} />
-                    匯出 CSV
-                  </button>
-                </div>
-              </div>
-              {importProgress ? (
-                <div className="import-progress" role="status" aria-live="polite">
-                  <div className="import-progress-label">
-                    <span>匯入 {importProgress.label}</span>
-                    <strong>{importProgress.current} / {importProgress.total}</strong>
-                  </div>
-                  <div className="import-progress-track">
-                    <div
-                      className="import-progress-bar"
-                      style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
-                    />
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      {activeModule.fields.slice(0, 6).map((field) => (
-                        <th key={field.key}>{field.label}</th>
-                      ))}
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleRecords.length ? (
-                      visibleRecords.map((record) => (
-                        <tr key={record.id}>
-                          {activeModule.fields.slice(0, 6).map((field) => (
-                            <td key={field.key}>{renderCell(record[field.key], field, activeModule)}</td>
-                          ))}
-                          <td>
-                            <div className="row-actions">
-                              <button type="button" onClick={() => editRecord(record)} aria-label="編輯">
-                                <Pencil size={15} />
-                              </button>
-                              <button type="button" onClick={() => deleteRecord(record.id)} aria-label="刪除">
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={activeModule.fields.slice(0, 6).length + 1} className="empty-cell">
-                          尚無資料，請新增或匯入 CSV。
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
             <aside className="editor-panel">
               <div className="editor-head">
                 <div>
@@ -1361,6 +1274,93 @@ export default function Index() {
                 <span>支援雙引號、多行備註、UTF-8 BOM 匯出，方便與既有 Appwrite CSV 往返。</span>
               </div>
             </aside>
+
+            <div className="table-panel">
+              <div className="toolbar">
+                <label className="search-box">
+                  <Search size={16} />
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={`搜尋 ${activeModule.label}`}
+                  />
+                </label>
+                <div className="toolbar-actions">
+                  <input
+                    ref={fileRef}
+                    className="file-input"
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void importCsv(file);
+                    }}
+                  />
+                  <button type="button" className="tool-button" onClick={() => fileRef.current?.click()} disabled={loading}>
+                    <Upload size={16} />
+                    匯入 CSV
+                  </button>
+                  <button type="button" className="tool-button" onClick={exportCsv} disabled={loading}>
+                    <Download size={16} />
+                    匯出 CSV
+                  </button>
+                </div>
+              </div>
+              {importProgress ? (
+                <div className="import-progress" role="status" aria-live="polite">
+                  <div className="import-progress-label">
+                    <span>匯入 {importProgress.label}</span>
+                    <strong>{importProgress.current} / {importProgress.total}</strong>
+                  </div>
+                  <div className="import-progress-track">
+                    <div
+                      className="import-progress-bar"
+                      style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      {activeModule.fields.slice(0, 6).map((field) => (
+                        <th key={field.key}>{field.label}</th>
+                      ))}
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleRecords.length ? (
+                      visibleRecords.map((record) => (
+                        <tr key={record.id}>
+                          {activeModule.fields.slice(0, 6).map((field) => (
+                            <td key={field.key}>{renderCell(record[field.key], field, activeModule)}</td>
+                          ))}
+                          <td>
+                            <div className="row-actions">
+                              <button type="button" onClick={() => editRecord(record)} aria-label="編輯">
+                                <Pencil size={15} />
+                              </button>
+                              <button type="button" onClick={() => deleteRecord(record.id)} aria-label="刪除">
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={activeModule.fields.slice(0, 6).length + 1} className="empty-cell">
+                          尚無資料，請新增或匯入 CSV。
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </section>
 
           <p className="toast" role="status">{toast}</p>
