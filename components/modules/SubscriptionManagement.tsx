@@ -307,11 +307,25 @@ function normalizeSubscriptionValue(value?: string | null) {
   return (value || "").trim().toLowerCase();
 }
 
+/* Do the arithmetic on the UTC calendar. Shifting a local Date and then
+   reading it back with toISOString() mixes the two: before 08:00 in UTC+8 the
+   local day is already tomorrow while UTC is still today, so an empty field
+   shifted by +30 came back a day early. */
 function shiftDateByDays(dateValue: string | undefined, offsetDays: number) {
-  const baseDate = dateValue ? new Date(dateValue) : new Date();
-  if (Number.isNaN(baseDate.getTime())) return dateValue || "";
-  baseDate.setDate(baseDate.getDate() + offsetDays);
-  return baseDate.toISOString().slice(0, 10);
+  const raw = (dateValue || "").trim();
+  let base: string;
+  if (!raw) {
+    const now = new Date();
+    base = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    base = raw;
+  } else {
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return raw;
+    base = parsed.toISOString().slice(0, 10);
+  }
+  const [year, month, day] = base.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + offsetDays)).toISOString().slice(0, 10);
 }
 
 function getSubscriptionSiteHref(site?: string | null) {
