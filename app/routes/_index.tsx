@@ -77,7 +77,8 @@ type ToolPreset = {
 const nowIso = () => new Date().toISOString();
 const storagePrefix = "fengbro-remix-crud";
 const settingsStorageKey = `${storagePrefix}:settings`;
-const defaultStrapiUrl = import.meta.env.VITE_STRAPI_URL || "";
+const fallbackStrapiUrl = "https://site--strapigoldshoot0720--p9rc2b8grv9b.code.run";
+const defaultStrapiUrl = import.meta.env.VITE_STRAPI_URL || fallbackStrapiUrl;
 const defaultStrapiApiToken = import.meta.env.VITE_STRAPI_API_TOKEN || "";
 
 const yahooFinanceSymbols = "2330.TW ^TWII USDTWD=X BTC-USD ^GSPC ^IXIC";
@@ -388,7 +389,7 @@ const subscriptionFields: FieldDef[] = [
   { key: "note", label: "備註", type: "textarea" },
   { key: "account", label: "帳號" },
   { key: "currency", label: "幣別", placeholder: "TWD" },
-  { key: "continue", label: "持續", type: "boolean", strapiKey: "iscontinue" },
+  { key: "continue", label: "持續", type: "boolean" },
 ];
 
 const mediaFields: FieldDef[] = [
@@ -474,7 +475,7 @@ const modules: ModuleDef[] = [
       { key: "title", label: "標題", required: true },
       { key: "content", label: "內容", type: "textarea" },
       { key: "category", label: "分類" },
-      { key: "newDate", label: "日期", type: "date", strapiKey: "newdate" },
+      { key: "newDate", label: "日期", type: "date", strapiKey: "newDate" },
       { key: "url1", label: "連結 1", type: "url" },
       { key: "url2", label: "連結 2", type: "url" },
       { key: "url3", label: "連結 3", type: "url" },
