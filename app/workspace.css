@@ -1,99 +1,282 @@
-/* Independent Strapi workspace identity: cool surfaces and precise controls. */
+/* 宣紙朱印 — an independent identity for 鋒兄AI Strapi.
+   A true-neutral paper ground, near-black ink, and a vermilion used the way
+   a 印章 is: the brand mark, the page you are on, and primary intent. Nothing
+   else earns colour. Depth comes from rules and whitespace, never from
+   shadow, blur or a corner radius. */
+
 :root {
-  --font-display: "Noto Sans TC", sans-serif;
-  --background: #eef3f8;
-  --foreground: #182b42;
+  --font-display: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+
+  --background: #ffffff;
+  --foreground: #17181a;
   --card: #ffffff;
-  --card-foreground: #182b42;
+  --card-foreground: #17181a;
   --popover: #ffffff;
-  --popover-foreground: #182b42;
-  --primary: #006c86;
+  --popover-foreground: #17181a;
+
+  /* 朱紅. The only hue in the system. */
+  --primary: #b0281f;
   --primary-foreground: #ffffff;
-  --accent: #c5f3fc;
-  --accent-strong: #006c86;
-  --accent-foreground: #123c50;
-  --secondary: #e0eaf2;
-  --secondary-foreground: #223d55;
-  --muted: #e8eff5;
-  --muted-foreground: #53687c;
-  --border: #cfdae5;
-  --input: #cfdae5;
-  --ring: #0087a3;
+  --ring: #b0281f;
+  --accent-strong: #8d1f18;
+
+  /* accent is a surface role — hovers and subtle fills. Keeping it neutral is
+     precisely what lets the vermilion stay rare. */
+  --accent: #f0f0ef;
+  --accent-foreground: #17181a;
+  --secondary: #f4f4f3;
+  --secondary-foreground: #24262a;
+  --muted: #f6f6f5;
+  --muted-foreground: #63666b;
+
+  --border: #ddddda;
+  --input: #c9c9c5;
   --panel-strong: #ffffff;
-  --panel-soft: #e9f0f6;
-  --panel-veil: #f6f9fc;
-  --line-soft: #d7e1eb;
-  --line-strong: #bacbd9;
+  --panel-soft: #f6f6f5;
+  --panel-veil: #ffffff;
+  --line-soft: #e2e2df;
+  --line-strong: #17181a;
+
   --shadow-soft: none;
-  --shadow-strong: 0 8px 28px #10203318;
+  --shadow-strong: none;
+  --shadow-dock: none;
+
+  /* Hard edges at every scale. */
+  --radius: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
 }
+
 .dark {
-  --background: #0b1422;
-  --foreground: #e0edf7;
-  --card: #142237;
-  --card-foreground: #e0edf7;
-  --popover: #182b42;
-  --popover-foreground: #e0edf7;
-  --primary: #68d7ed;
-  --primary-foreground: #092536;
-  --accent: #19475b;
-  --accent-strong: #68d7ed;
-  --accent-foreground: #c9f7ff;
-  --muted: #203047;
-  --muted-foreground: #a2b6c9;
-  --secondary: #22364d;
-  --secondary-foreground: #d9e9f6;
-  --border: #344a60;
-  --input: #344a60;
-  --ring: #68d7ed;
-  --panel-strong: #142237;
-  --panel-soft: #1b2d43;
-  --panel-veil: #142237;
-  --line-soft: #30465d;
-  --line-strong: #49637b;
+  --background: #131314;
+  --foreground: #f2f2f0;
+  --card: #1b1b1c;
+  --card-foreground: #f2f2f0;
+  --popover: #1f1f20;
+  --popover-foreground: #f2f2f0;
+
+  --primary: #e8695c;
+  --primary-foreground: #17181a;
+  --ring: #e8695c;
+  --accent-strong: #f08c80;
+
+  --accent: #2a2a2b;
+  --accent-foreground: #f2f2f0;
+  --secondary: #262627;
+  --secondary-foreground: #f2f2f0;
+  --muted: #232324;
+  --muted-foreground: #a8a8a5;
+
+  --border: #3a3a3b;
+  --input: #454546;
+  --panel-strong: #1b1b1c;
+  --panel-soft: #232324;
+  --panel-veil: #131314;
+  --line-soft: #333334;
+  --line-strong: #f2f2f0;
 }
-body { font-family: "Noto Sans TC", sans-serif; }
-::selection { background: #a8eaf5; color: #102d40; }
-input, textarea, select { accent-color: var(--primary); caret-color: var(--primary); }
-.workspace-content { min-width: 0; }
-.strapi-workspace .subscription-editor { background: var(--card); border-color: var(--line-strong); }
-.strapi-workspace .subscription-editor h3 { color: var(--primary); }
+
+body {
+  font-family: var(--font-display);
+  background-image: none;
+}
+
+::selection {
+  background: #b0281f;
+  color: #ffffff;
+}
+
+.dark ::selection {
+  background: #e8695c;
+  color: #17181a;
+}
+
+input,
+textarea,
+select {
+  accent-color: var(--primary);
+  caret-color: var(--primary);
+}
+
+.workspace-content {
+  min-width: 0;
+}
+
+/* Nothing floats and nothing rounds. */
 .strapi-workspace .surface-panel,
-.strapi-workspace .surface-raised { border-radius: 12px; box-shadow: none; backdrop-filter: none; }
-.strapi-workspace h1, .strapi-workspace h2, .strapi-workspace h3 {
-  font-family: "Noto Sans TC", sans-serif;
-  letter-spacing: -.025em;
-}
-.strapi-workspace h1 { font-size: clamp(1.6rem, 2.4vw, 2.3rem); }
-.strapi-workspace [data-slot="button"], .strapi-workspace input,
-.strapi-workspace textarea, .strapi-workspace [role="combobox"] { border-radius: 7px; }
-.strapi-workspace table { font-variant-numeric: tabular-nums; }
-.strapi-workspace thead { background: var(--panel-soft); }
-.strapi-workspace th { color: var(--muted-foreground); font-size: .78rem; font-weight: 600; }
-.strapi-workspace td { border-color: var(--line-soft); }
-.strapi-workspace tbody tr:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
-#desktop-top-nav {
-  background: #101e33;
-  border-color: #294058;
+.strapi-workspace .surface-raised,
+.strapi-workspace .surface-floating,
+.strapi-workspace [data-slot="button"],
+.strapi-workspace input,
+.strapi-workspace textarea,
+.strapi-workspace [role="combobox"],
+.strapi-workspace .nav-item,
+.strapi-workspace .nav-item-active {
+  border-radius: 0;
+  box-shadow: none;
   backdrop-filter: none;
-  --foreground: #e8f2fc;
-  --muted-foreground: #b8cadc;
-  --panel-soft: #1c324b;
-  --line-soft: #2c435b;
-  --line-strong: #3e5870;
 }
-#desktop-top-nav > div:first-child { height: 72px; gap: 24px; }
-#desktop-top-nav > div:nth-child(2) { background: #172a40; }
-#desktop-top-nav .nav-item { border-radius: 5px; }
-#desktop-top-nav .nav-item-active { background: #21465a; color: #91edff; box-shadow: inset 0 -2px #68d7ed; }
-#desktop-top-nav .nav-item-active svg { color: #91edff; }
-#desktop-top-nav .workspace-brand p { color: #e8f2fc; font-size: 15px; letter-spacing: .02em; font-weight: 700; }
-.workspace-brand > div:first-child { background: var(--primary); box-shadow: none; border-radius: 6px; }
-#desktop-top-nav .workspace-brand > div:first-child { background: #68d7ed; color: #102033; }
-#desktop-top-nav > div:first-child > div:last-child { background: #172a40; border-radius: 6px; }
-.strapi-workspace .nav-item-active { border-radius: 5px; }
-.strapi-workspace main { padding-top: 24px; }
+
+/* A panel is ruled off from the page rather than lifted above it. */
+.strapi-workspace .surface-raised {
+  border-top: 2px solid var(--line-strong);
+}
+
+.strapi-workspace .ambient-grid {
+  background-image: none;
+}
+
+/* Chinese type is the voice: heavy, tight, large. */
+.strapi-workspace h1,
+.strapi-workspace h2,
+.strapi-workspace h3,
+.strapi-workspace h4 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.strapi-workspace h1 {
+  font-size: clamp(1.9rem, 2.8vw, 2.9rem);
+}
+
+/* Signature: a vermilion rule opening the section, like the edge of a stamp. */
+.strapi-workspace h1 {
+  position: relative;
+  padding-left: 0.8rem;
+}
+
+.strapi-workspace h1::before {
+  content: "";
+  position: absolute;
+  top: 0.12em;
+  bottom: 0.2em;
+  left: 0;
+  width: 4px;
+  background: var(--primary);
+}
+
+.strapi-workspace .subscription-editor {
+  background: var(--card);
+  border-color: var(--line-strong);
+}
+
+.strapi-workspace .subscription-editor h3 {
+  color: var(--foreground);
+}
+
+/* Tables are the substance of a database console: ruled, aligned, quiet. */
+.strapi-workspace table {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.strapi-workspace thead {
+  background: transparent;
+}
+
+.strapi-workspace th {
+  border-bottom: 2px solid var(--line-strong);
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.strapi-workspace td {
+  border-color: var(--line-soft);
+}
+
+.strapi-workspace tbody tr:hover {
+  background: var(--accent);
+}
+
+/* Top chrome is paper with a heavy rule under it, not a coloured bar. */
+#desktop-top-nav {
+  background: var(--panel-veil);
+  border-color: var(--line-strong);
+  border-bottom-width: 2px;
+  backdrop-filter: none;
+}
+
+#desktop-top-nav > div:first-child {
+  height: 72px;
+  gap: 24px;
+}
+
+#desktop-top-nav > div:nth-child(2) {
+  background: var(--panel-soft);
+}
+
+/* The seal marks the page you are on; the section holding it is stamped in
+   ink, so exactly one vermilion block is ever on screen. */
+.strapi-workspace .nav-item-active {
+  background: var(--foreground);
+  color: var(--background);
+  font-weight: 700;
+}
+
+.strapi-workspace .nav-item-active svg {
+  color: var(--background);
+}
+
+#desktop-top-nav > div:nth-child(2) .nav-item-active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+#desktop-top-nav > div:nth-child(2) .nav-item-active svg {
+  color: var(--primary-foreground);
+}
+
+/* Brand: a solid vermilion square carrying 鋒. Flat, hard edged, stamped. */
+.workspace-brand > div:first-child {
+  position: relative;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.workspace-brand > div:first-child > svg {
+  visibility: hidden;
+}
+
+.workspace-brand > div:first-child::after {
+  content: "鋒";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+#desktop-top-nav .workspace-brand p {
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+#desktop-top-nav > div:first-child > div:last-child {
+  background: var(--panel-soft);
+  border-radius: 0;
+}
+
+.strapi-workspace main {
+  padding-top: 24px;
+}
+
 @media (max-width: 767px) {
-  .strapi-workspace main { padding-top: 16px; }
-  .strapi-workspace .surface-panel { border-radius: 10px; }
+  .strapi-workspace main {
+    padding-top: 16px;
+  }
 }
