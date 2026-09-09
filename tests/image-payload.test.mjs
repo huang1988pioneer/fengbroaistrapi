@@ -17,7 +17,7 @@ function visit(node) {
 visit(ast);
 const compiled = ts.transpileModule(snippets.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 
-test("uploaded image keeps its URL in file and sends a boolean cover", async () => {
+test("uploaded image sends file and cover URLs matching the Strapi text schema", async () => {
   const url = "https://example.test/uploads/image.png";
   const context = vm.createContext({
     settings: {}, activeModule: { id: "image" }, mediaUploadRef: { current: null },
@@ -29,20 +29,22 @@ test("uploaded image keeps its URL in file and sends a boolean cover", async () 
   await vm.runInContext('uploadMediaFile({ name: "image.png" })', context);
   const data = vm.runInContext('toStrapiData(normalizeDraft(draft, activeModule), activeModule)', context);
   assert.equal(data.file, url);
-  assert.equal(typeof data.cover, "boolean");
-  assert.equal(data.cover, false);
-  vm.runInContext('draft.cover = true', context);
+  assert.equal(typeof data.cover, "string");
+  assert.equal(data.cover, url);
+  vm.runInContext('draft.cover = false', context);
   await vm.runInContext('uploadMediaFile({ name: "replacement.png" })', context);
-  assert.equal(vm.runInContext('draft.cover', context), true);
+  assert.equal(vm.runInContext('draft.cover', context), url);
 });
 
-test("image form, CSV and API serialization respect boolean cover values", () => {
+test("image form, CSV and API serialization preserve optional cover URLs", () => {
   const context = vm.createContext({});
   vm.runInContext(compiled + '\nconst moduleDef = { fields: imageFields };', context);
-  for (const [value, expected] of [[true, true], [false, false], ["true", true], ["false", false], ["", false], ["https://example.test/old.png", false]]) {
+  for (const [value, expected] of [["", ""], ["https://example.test/old.png", "https://example.test/old.png"]]) {
     context.value = value;
     assert.equal(vm.runInContext('toStrapiData(normalizeDraft({ cover: value }, moduleDef), moduleDef).cover', context), expected);
     assert.equal(vm.runInContext('toStrapiData({ cover: value }, moduleDef).cover', context), expected);
   }
+  assert.equal(vm.runInContext('toStrapiData(getEmptyDraft(moduleDef), moduleDef).cover', context), "");
+  assert.equal(vm.runInContext('imageFields.find(field => field.key === "cover").type', context), "url");
   assert.equal(vm.runInContext('fileAssetFields.find(field => field.key === "cover").type', context), "url");
 });

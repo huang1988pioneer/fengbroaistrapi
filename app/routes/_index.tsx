@@ -434,7 +434,7 @@ const imageFields: FieldDef[] = [
   { key: "ref", label: "來源/參考", type: "url" },
   { key: "category", label: "分類" },
   { key: "hash", label: "Hash" },
-  { key: "cover", label: "設為封面", type: "boolean" },
+  { key: "cover", label: "封面 URL", type: "url" },
 ];
 
 const fileAssetFields: FieldDef[] = [
@@ -946,7 +946,7 @@ export default function Index() {
         ...prev,
         name: String(prev.name || file.name.replace(/\.[^.]+$/, "")),
         file: url,
-        cover: activeModule.id === "image" ? prev.cover === true || prev.cover === "true" : url,
+        cover: url,
         filetype: normalizeFileType(uploaded, file),
         hash: String(uploaded.hash ?? ""),
         fileSize: activeModule.id === "video" ? getUploadedFileSize(uploaded, file) : prev.fileSize ?? 0,
