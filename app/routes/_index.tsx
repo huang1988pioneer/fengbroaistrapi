@@ -434,7 +434,7 @@ const imageFields: FieldDef[] = [
   { key: "ref", label: "來源/參考", type: "url" },
   { key: "category", label: "分類" },
   { key: "hash", label: "Hash" },
-  { key: "cover", label: "封面 URL", type: "url" },
+  { key: "cover", label: "設為封面", type: "boolean" },
 ];
 
 const fileAssetFields: FieldDef[] = [
@@ -946,7 +946,7 @@ export default function Index() {
         ...prev,
         name: String(prev.name || file.name.replace(/\.[^.]+$/, "")),
         file: url,
-        cover: url,
+        cover: activeModule.id === "image" ? prev.cover === true || prev.cover === "true" : url,
         filetype: normalizeFileType(uploaded, file),
         hash: String(uploaded.hash ?? ""),
         fileSize: activeModule.id === "video" ? getUploadedFileSize(uploaded, file) : prev.fileSize ?? 0,
@@ -1207,10 +1207,10 @@ export default function Index() {
                   </label>
                 ))}
               </div>
-              {activeModule.id === "image" && String(draft.file ?? draft.cover ?? "").trim() ? (
+              {activeModule.id === "image" && String(draft.file ?? "").trim() ? (
                 <div className="image-preview-panel">
                   <span>圖片預覽</span>
-                  <img src={String(draft.file || draft.cover)} alt={String(draft.name || "鋒兄圖片預覽")} />
+                  <img src={String(draft.file)} alt={String(draft.name || "鋒兄圖片預覽")} />
                 </div>
               ) : null}
 
@@ -2759,6 +2759,9 @@ function toStrapiData(record: Record<string, string | number | boolean>, moduleD
 }
 
 function toStrapiFieldValue(value: string | number | boolean | undefined, field: FieldDef) {
+  if (field.type === "boolean") {
+    return value === true || value === "true";
+  }
   if ((field.type === "date" || field.type === "datetime") && String(value ?? "").trim() === "") {
     return null;
   }
