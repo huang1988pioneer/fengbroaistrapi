@@ -5,6 +5,25 @@
    dark are one system rather than two stylesheets.
    ============================================================ */
 
+.app-loading {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.app-loading h1 {
+  color: var(--teal);
+  font-family: var(--font-display);
+}
+
+.app-loading p {
+  color: var(--muted);
+}
+
 :root {
   color-scheme: light;
 

@@ -1,4 +1,5 @@
 import type { LinksFunction, MetaFunction } from "@remix-run/node";
+import type { ReactNode } from "react";
 import {
   Links,
   Meta,
@@ -26,7 +27,7 @@ export const meta: MetaFunction = () => [
   },
 ];
 
-export default function App() {
+export function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="zh-Hant-TW">
       <head>
@@ -36,10 +37,24 @@ export default function App() {
         <Links />
       </head>
       <body>
-        <Outlet />
+        {children}
         <ScrollRestoration />
         <Scripts />
       </body>
     </html>
   );
+}
+
+export function HydrateFallback() {
+  return (
+    <main className="app-loading" aria-labelledby="loading-title">
+      <h1 id="loading-title">鋒兄資料庫</h1>
+      <p role="status">正在載入操作介面，請稍候…</p>
+      <noscript>請啟用 JavaScript，才能使用資料庫功能。</noscript>
+    </main>
+  );
+}
+
+export default function App() {
+  return <Outlet />;
 }
