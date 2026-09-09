@@ -36,3 +36,25 @@ test('date shortcuts preserve month rollover and invalid input', () => {
   assert.equal(shiftDateByDays('2026-01-31', 30), '2026-03-02');
   assert.equal(shiftDateByDays('not a date', 30), 'not a date');
 });
+
+// An empty field means "from today". Freeze the clock at 03:00 in UTC+8, where
+// the local day has already rolled over but the UTC day has not, so reading a
+// shifted local Date back through toISOString() lands a day early.
+test('an empty date shifts from the local day, not the UTC day', () => {
+  const frozen = new Date('2026-09-09T19:00:00.000Z');
+  const StubDate = class extends Date {
+    constructor(...args) {
+      super(...(args.length ? args : [frozen.getTime()]));
+    }
+    static now() {
+      return frozen.getTime();
+    }
+  };
+  assert.equal(new StubDate().getDate(), 10, 'precondition: the frozen clock is already 2026-09-10 locally');
+
+  const scoped = vm.createContext({ Date: StubDate });
+  vm.runInContext(compiled + '; globalThis.shift = shiftDateByDays;', scoped);
+
+  assert.equal(scoped.shift('', 30), '2026-10-10');
+  assert.equal(scoped.shift('', 0), '2026-09-10');
+});
