@@ -14,20 +14,32 @@ import {
   FolderHeart,
   Image,
   Info,
+  LayoutGrid,
+  Menu,
+  Monitor,
+  Moon,
   Music,
   PackagePlus,
   Pencil,
   Plus,
   RefreshCcw,
+  Rows2,
+  Rows4,
   Search,
   Settings,
+  Sun,
   Trash2,
   Upload,
   Utensils,
   Wrench,
+  X,
 } from "lucide-react";
 
 type FieldType = "text" | "number" | "date" | "datetime" | "textarea" | "url" | "boolean";
+
+type ThemeMode = "light" | "dark" | "system";
+
+type DensityMode = "comfortable" | "compact";
 
 type FieldDef = {
   key: string;
@@ -77,6 +89,8 @@ type ToolPreset = {
 const nowIso = () => new Date().toISOString();
 const storagePrefix = "fengbro-remix-crud";
 const settingsStorageKey = `${storagePrefix}:settings`;
+const themeStorageKey = `${storagePrefix}:theme`;
+const densityStorageKey = `${storagePrefix}:density`;
 const fallbackStrapiUrl = "https://site--strapigoldshoot0720--p9rc2b8grv9b.code.run";
 const defaultStrapiUrl = import.meta.env.VITE_STRAPI_URL || fallbackStrapiUrl;
 const defaultStrapiApiToken = import.meta.env.VITE_STRAPI_API_TOKEN || "";
@@ -588,6 +602,20 @@ const modules: ModuleDef[] = [
 const modulesWithToolConfig = configureToolModules(modules);
 const moduleMap = new Map(flattenModules(modulesWithToolConfig).map((item) => [item.id, item]));
 
+/* The phone dock holds four modules; everything else lives in the drawer. */
+const dockModules = ["subscription", "food", "article", "tools"]
+  .map((id) => modulesWithToolConfig.find((item) => item.id === id))
+  .filter((item): item is ModuleDef => Boolean(item));
+
+function isBranchActive(item: ModuleDef, activeId: string) {
+  return item.id === activeId || Boolean(item.children?.some((child) => child.id === activeId));
+}
+
+/* Chrome is tight — the 鋒兄 prefix is already in the wordmark. */
+function shortLabel(label: string) {
+  return label.replace(/^鋒兄/, "") || label;
+}
+
 function configureToolModules(sourceModules: ModuleDef[]) {
   return sourceModules.map((moduleDef) => {
     if (moduleDef.id !== "tools" || !moduleDef.children) return moduleDef;
@@ -627,6 +655,10 @@ export default function Index() {
   const [loading, setLoading] = useState(false);
   const [importProgress, setImportProgress] = useState<{ label: string; current: number; total: number } | null>(null);
   const [toast, setToast] = useState("已準備 Remix CRUD 工作台");
+  const [theme, setTheme] = useState<ThemeMode>("system");
+  const [density, setDensity] = useState<DensityMode>("comfortable");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const activeParent = modulesWithToolConfig.find((item) => isBranchActive(item, activeId));
 
   useEffect(() => {
     const saved = window.localStorage.getItem(settingsStorageKey);
@@ -634,6 +666,34 @@ export default function Index() {
       setSettings({ ...getDefaultSettingsRecord(), ...(JSON.parse(saved) as ItemRecord) });
     }
   }, []);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem(themeStorageKey);
+    if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") setTheme(savedTheme);
+    const savedDensity = window.localStorage.getItem(densityStorageKey);
+    if (savedDensity === "comfortable" || savedDensity === "compact") setDensity(savedDensity);
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === "system") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", theme);
+    window.localStorage.setItem(themeStorageKey, theme);
+  }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-density", density);
+    window.localStorage.setItem(densityStorageKey, density);
+  }, [density]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setDrawerOpen(false);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [drawerOpen]);
 
   useEffect(() => {
     setEditingId(null);
@@ -900,6 +960,16 @@ export default function Index() {
     }
   }
 
+  function selectModule(item: ModuleDef) {
+    setActiveId(item.children?.length ? item.children[0].id : item.id);
+    setDrawerOpen(false);
+  }
+
+  function selectModuleId(id: string) {
+    setActiveId(id);
+    setDrawerOpen(false);
+  }
+
   function exportCsv() {
     const csv = toCsv(records, activeModule.fields.map((field) => field.key));
     const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
@@ -914,239 +984,356 @@ export default function Index() {
 
   return (
     <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
+      <nav className="rail-nav" aria-label="鋒兄模組">
+        <div className="rail-head">
           <div className="brand-mark">鋒</div>
-          <div>
-            <h1>鋒兄資料庫</h1>
-            <p>Remix CRUD Console</p>
-          </div>
         </div>
-        <nav className="nav-list" aria-label="鋒兄模組">
+        <div className="rail-list">
           {modulesWithToolConfig.map((item) => (
-            <NavItem key={item.id} item={item} activeId={activeId} onSelect={setActiveId} />
+            <button
+              key={item.id}
+              type="button"
+              className={isBranchActive(item, activeId) ? "rail-item active" : "rail-item"}
+              title={item.subtitle}
+              onClick={() => selectModule(item)}
+            >
+              {item.icon}
+              <span>{shortLabel(item.label)}</span>
+            </button>
           ))}
-        </nav>
-      </aside>
+        </div>
+        <div className="rail-foot">
+          <button type="button" className="rail-item" onClick={() => setDrawerOpen(true)}>
+            <LayoutGrid />
+            <span>全部</span>
+          </button>
+        </div>
+      </nav>
 
-      <section className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyeline">配合 Strapihuang1988pioneer，參考 fengbroaiappwrite</p>
-            <h2>{activeModule.label}</h2>
-            <p>{activeModule.subtitle}</p>
+      <div className="shell-main">
+        <header className="top-nav">
+          <div className="top-nav-row">
+            <div className="brand">
+              <div className="brand-mark">鋒</div>
+              <div>
+                <h1>鋒兄資料庫</h1>
+                <p>Remix CRUD Console</p>
+              </div>
+            </div>
+            <nav className="top-nav-tabs" aria-label="鋒兄模組">
+              {modulesWithToolConfig.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={isBranchActive(item, activeId) ? "nav-tab active" : "nav-tab"}
+                  onClick={() => selectModule(item)}
+                >
+                  {item.icon}
+                  {shortLabel(item.label)}
+                </button>
+              ))}
+            </nav>
+            <DesignCluster theme={theme} density={density} onTheme={setTheme} onDensity={setDensity} />
           </div>
-          <div className="top-actions">
-            <button className="ghost-button" type="button" onClick={resetSeed}>
-              <RefreshCcw size={16} />
-              {activeModule.id === "settings" ? "重設設定" : activeModule.seedCsv ? "匯入範例" : "重新載入"}
-            </button>
-            <button className="primary-button" type="button" onClick={() => setDraft(getEmptyDraft(activeModule))}>
-              <Plus size={16} />
-              新增
-            </button>
-          </div>
+          {activeParent?.children?.length ? (
+            <div className="top-subnav">
+              <div className="top-subnav-row">
+                {activeParent.children.map((child) => (
+                  <button
+                    key={child.id}
+                    type="button"
+                    className={child.id === activeId ? "nav-tab compact active" : "nav-tab compact"}
+                    onClick={() => setActiveId(child.id)}
+                  >
+                    {child.icon}
+                    {child.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </header>
 
-        <section className="stats-strip" aria-label="資料統計">
-          <Metric label="資料筆數" value={String(stats.total)} />
-          <Metric label="數值合計" value={formatNumber(stats.numericTotal)} />
-          <Metric label="欄位數" value={String(activeModule.fields.length)} />
-          <Metric label="CSV" value="匯入 / 匯出" />
-        </section>
-
-        {isToolModule(activeModule.id) ? (
-          <LiveToolWorkspaceReplica moduleId={activeModule.id} draft={draft} records={records} setActiveId={setActiveId} setDraft={setDraft} setToast={setToast} />
-        ) : null}
-
-        <section className="content-grid">
-          <div className="table-panel">
-            <div className="toolbar">
-              <label className="search-box">
-                <Search size={16} />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder={`搜尋 ${activeModule.label}`}
-                />
-              </label>
-              <div className="toolbar-actions">
-                <input
-                  ref={fileRef}
-                  className="file-input"
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void importCsv(file);
-                  }}
-                />
-                <button type="button" className="tool-button" onClick={() => fileRef.current?.click()} disabled={loading}>
-                  <Upload size={16} />
-                  匯入 CSV
-                </button>
-                <button type="button" className="tool-button" onClick={exportCsv} disabled={loading}>
-                  <Download size={16} />
-                  匯出 CSV
-                </button>
-              </div>
-            </div>
-            {importProgress ? (
-              <div className="import-progress" role="status" aria-live="polite">
-                <div className="import-progress-label">
-                  <span>匯入 {importProgress.label}</span>
-                  <strong>{importProgress.current} / {importProgress.total}</strong>
-                </div>
-                <div className="import-progress-track">
-                  <div
-                    className="import-progress-bar"
-                    style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    {activeModule.fields.slice(0, 6).map((field) => (
-                      <th key={field.key}>{field.label}</th>
-                    ))}
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRecords.length ? (
-                    visibleRecords.map((record) => (
-                      <tr key={record.id}>
-                        {activeModule.fields.slice(0, 6).map((field) => (
-                          <td key={field.key}>{renderCell(record[field.key], field, activeModule)}</td>
-                        ))}
-                        <td>
-                          <div className="row-actions">
-                            <button type="button" onClick={() => editRecord(record)} aria-label="編輯">
-                              <Pencil size={15} />
-                            </button>
-                            <button type="button" onClick={() => deleteRecord(record.id)} aria-label="刪除">
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={activeModule.fields.slice(0, 6).length + 1} className="empty-cell">
-                        尚無資料，請新增或匯入 CSV。
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+        <header className="mobile-bar">
+          <div className="brand">
+            <div className="brand-mark">鋒</div>
+            <div>
+              <h1>鋒兄資料庫</h1>
+              <p>{activeModule.label}</p>
             </div>
           </div>
+          <DesignCluster theme={theme} density={density} onTheme={setTheme} onDensity={setDensity} />
+        </header>
 
-          <aside className="editor-panel">
-            <div className="editor-head">
-              <div>
-                <h3>{editingId ? "編輯資料" : "新增資料"}</h3>
-                <p>{activeModule.label} 欄位會跟 CSV 表頭一致保存。</p>
-              </div>
-              <span className="status-pill">
-                <Check size={14} />
-                {activeModule.id === "settings" ? "Local" : "Strapi"}
-              </span>
+        <section className="workspace">
+          <header className="topbar">
+            <div>
+              <p className="eyeline">配合 Strapihuang1988pioneer，參考 fengbroaiappwrite</p>
+              <h2>{activeModule.label}</h2>
+              <p>{activeModule.subtitle}</p>
             </div>
+            <div className="top-actions">
+              <button className="ghost-button" type="button" onClick={resetSeed}>
+                <RefreshCcw size={16} />
+                {activeModule.id === "settings" ? "重設設定" : activeModule.seedCsv ? "匯入範例" : "重新載入"}
+              </button>
+              <button className="primary-button" type="button" onClick={() => setDraft(getEmptyDraft(activeModule))}>
+                <Plus size={16} />
+                新增
+              </button>
+            </div>
+          </header>
 
-            <div className="form-grid">
-              {activeModule.fields.map((field) => (
-                <label key={field.key} className={field.type === "textarea" ? "field field-wide" : "field"}>
-                  <span>{field.label}</span>
-                  <FieldInput
-                    field={field}
-                    value={draft[field.key] ?? ""}
-                    onChange={(value) => setDraft((prev) => ({ ...prev, [field.key]: value }))}
+          <section className="stats-strip" aria-label="資料統計">
+            <Metric label="資料筆數" value={String(stats.total)} />
+            <Metric label="數值合計" value={formatNumber(stats.numericTotal)} />
+            <Metric label="欄位數" value={String(activeModule.fields.length)} />
+            <Metric label="CSV" value="匯入 / 匯出" />
+          </section>
+
+          {isToolModule(activeModule.id) ? (
+            <LiveToolWorkspaceReplica moduleId={activeModule.id} draft={draft} records={records} setActiveId={setActiveId} setDraft={setDraft} setToast={setToast} />
+          ) : null}
+
+          <section className="content-grid">
+            <div className="table-panel">
+              <div className="toolbar">
+                <label className="search-box">
+                  <Search size={16} />
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={`搜尋 ${activeModule.label}`}
                   />
                 </label>
-              ))}
-            </div>
-            {activeModule.id === "image" && String(draft.file ?? draft.cover ?? "").trim() ? (
-              <div className="image-preview-panel">
-                <span>圖片預覽</span>
-                <img src={String(draft.file || draft.cover)} alt={String(draft.name || "鋒兄圖片預覽")} />
-              </div>
-            ) : null}
-
-            {activeModule.id === "video" && String(draft.file ?? "").trim() ? (
-              <div className="image-preview-panel">
-                <span>影片預覽</span>
-                <video src={String(draft.file)} controls preload="metadata" />
-              </div>
-            ) : null}
-
-            {isAudioModule(activeModule.id) && String(draft.file ?? "").trim() ? (
-              <div className="image-preview-panel">
-                <span>音樂預覽</span>
-                <audio src={String(draft.file)} controls preload="metadata" />
-              </div>
-            ) : null}
-
-            {activeModule.id === "document" && String(draft.file ?? "").trim() ? (
-              <div className="image-preview-panel">
-                <span>檔案預覽</span>
-                <DocumentPreview url={String(draft.file)} filetype={String(draft.filetype ?? "")} title={String(draft.name ?? "鋒兄文件")} large />
-              </div>
-            ) : null}
-
-            <div className="editor-actions">
-              {isUploadModule(activeModule.id) ? (
-                <>
+                <div className="toolbar-actions">
                   <input
-                    ref={mediaUploadRef}
+                    ref={fileRef}
                     className="file-input"
                     type="file"
-                    accept={getUploadAccept(activeModule.id)}
+                    accept=".csv,text/csv"
                     onChange={(event) => {
                       const file = event.target.files?.[0];
-                      if (file) void uploadMediaFile(file);
+                      if (file) void importCsv(file);
                     }}
                   />
-                  <button className="tool-button" type="button" onClick={() => mediaUploadRef.current?.click()} disabled={loading}>
+                  <button type="button" className="tool-button" onClick={() => fileRef.current?.click()} disabled={loading}>
                     <Upload size={16} />
-                    上傳{getUploadKind(activeModule.id)}
+                    匯入 CSV
                   </button>
-                </>
+                  <button type="button" className="tool-button" onClick={exportCsv} disabled={loading}>
+                    <Download size={16} />
+                    匯出 CSV
+                  </button>
+                </div>
+              </div>
+              {importProgress ? (
+                <div className="import-progress" role="status" aria-live="polite">
+                  <div className="import-progress-label">
+                    <span>匯入 {importProgress.label}</span>
+                    <strong>{importProgress.current} / {importProgress.total}</strong>
+                  </div>
+                  <div className="import-progress-track">
+                    <div
+                      className="import-progress-bar"
+                      style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
               ) : null}
-              <button className="primary-button" type="button" onClick={saveRecord} disabled={loading}>
-                {loading ? "處理中..." : editingId ? "儲存修改" : "建立資料"}
-              </button>
-              {activeModule.id === "settings" ? (
-                <button className="tool-button" type="button" onClick={testStrapiConnection} disabled={loading}>
-                  測試連線
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      {activeModule.fields.slice(0, 6).map((field) => (
+                        <th key={field.key}>{field.label}</th>
+                      ))}
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleRecords.length ? (
+                      visibleRecords.map((record) => (
+                        <tr key={record.id}>
+                          {activeModule.fields.slice(0, 6).map((field) => (
+                            <td key={field.key}>{renderCell(record[field.key], field, activeModule)}</td>
+                          ))}
+                          <td>
+                            <div className="row-actions">
+                              <button type="button" onClick={() => editRecord(record)} aria-label="編輯">
+                                <Pencil size={15} />
+                              </button>
+                              <button type="button" onClick={() => deleteRecord(record.id)} aria-label="刪除">
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={activeModule.fields.slice(0, 6).length + 1} className="empty-cell">
+                          尚無資料，請新增或匯入 CSV。
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <aside className="editor-panel">
+              <div className="editor-head">
+                <div>
+                  <h3>{editingId ? "編輯資料" : "新增資料"}</h3>
+                  <p>{activeModule.label} 欄位會跟 CSV 表頭一致保存。</p>
+                </div>
+                <span className="status-pill">
+                  <Check size={14} />
+                  {activeModule.id === "settings" ? "Local" : "Strapi"}
+                </span>
+              </div>
+
+              <div className="form-grid">
+                {activeModule.fields.map((field) => (
+                  <label key={field.key} className={field.type === "textarea" ? "field field-wide" : "field"}>
+                    <span>{field.label}</span>
+                    <FieldInput
+                      field={field}
+                      value={draft[field.key] ?? ""}
+                      onChange={(value) => setDraft((prev) => ({ ...prev, [field.key]: value }))}
+                    />
+                  </label>
+                ))}
+              </div>
+              {activeModule.id === "image" && String(draft.file ?? draft.cover ?? "").trim() ? (
+                <div className="image-preview-panel">
+                  <span>圖片預覽</span>
+                  <img src={String(draft.file || draft.cover)} alt={String(draft.name || "鋒兄圖片預覽")} />
+                </div>
+              ) : null}
+
+              {activeModule.id === "video" && String(draft.file ?? "").trim() ? (
+                <div className="image-preview-panel">
+                  <span>影片預覽</span>
+                  <video src={String(draft.file)} controls preload="metadata" />
+                </div>
+              ) : null}
+
+              {isAudioModule(activeModule.id) && String(draft.file ?? "").trim() ? (
+                <div className="image-preview-panel">
+                  <span>音樂預覽</span>
+                  <audio src={String(draft.file)} controls preload="metadata" />
+                </div>
+              ) : null}
+
+              {activeModule.id === "document" && String(draft.file ?? "").trim() ? (
+                <div className="image-preview-panel">
+                  <span>檔案預覽</span>
+                  <DocumentPreview url={String(draft.file)} filetype={String(draft.filetype ?? "")} title={String(draft.name ?? "鋒兄文件")} large />
+                </div>
+              ) : null}
+
+              <div className="editor-actions">
+                {isUploadModule(activeModule.id) ? (
+                  <>
+                    <input
+                      ref={mediaUploadRef}
+                      className="file-input"
+                      type="file"
+                      accept={getUploadAccept(activeModule.id)}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void uploadMediaFile(file);
+                      }}
+                    />
+                    <button className="tool-button" type="button" onClick={() => mediaUploadRef.current?.click()} disabled={loading}>
+                      <Upload size={16} />
+                      上傳{getUploadKind(activeModule.id)}
+                    </button>
+                  </>
+                ) : null}
+                <button className="primary-button" type="button" onClick={saveRecord} disabled={loading}>
+                  {loading ? "處理中..." : editingId ? "儲存修改" : "建立資料"}
                 </button>
-              ) : null}
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setDraft(getEmptyDraft(activeModule));
-                }}
-              >
-                清空
-              </button>
-            </div>
+                {activeModule.id === "settings" ? (
+                  <button className="tool-button" type="button" onClick={testStrapiConnection} disabled={loading}>
+                    測試連線
+                  </button>
+                ) : null}
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setDraft(getEmptyDraft(activeModule));
+                  }}
+                >
+                  清空
+                </button>
+              </div>
 
-            <div className="csv-note">
-              <strong>Appwrite CSV 相容</strong>
-              <span>支援雙引號、多行備註、UTF-8 BOM 匯出，方便與既有 Appwrite CSV 往返。</span>
-            </div>
-          </aside>
+              <div className="csv-note">
+                <strong>Appwrite CSV 相容</strong>
+                <span>支援雙引號、多行備註、UTF-8 BOM 匯出，方便與既有 Appwrite CSV 往返。</span>
+              </div>
+            </aside>
+          </section>
+
+          <p className="toast" role="status">{toast}</p>
         </section>
+      </div>
 
-        <p className="toast" role="status">{toast}</p>
-      </section>
+      <nav className="dock" aria-label="快速切換">
+        {dockModules.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={isBranchActive(item, activeId) ? "dock-item active" : "dock-item"}
+            onClick={() => selectModule(item)}
+          >
+            {item.icon}
+            <span>{shortLabel(item.label)}</span>
+          </button>
+        ))}
+        <button type="button" className="dock-item" onClick={() => setDrawerOpen(true)}>
+          <Menu />
+          <span>全部</span>
+        </button>
+      </nav>
+
+      <div
+        className={drawerOpen ? "drawer open" : "drawer"}
+        role="presentation"
+        onClick={() => setDrawerOpen(false)}
+      >
+        <div
+          className="drawer-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label="鋒兄模組"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="drawer-head">
+            <div className="brand">
+              <div className="brand-mark">鋒</div>
+              <div>
+                <h1>全部模組</h1>
+                <p>{modulesWithToolConfig.length} 個資料模組</p>
+              </div>
+            </div>
+            <button type="button" onClick={() => setDrawerOpen(false)} aria-label="關閉模組清單">
+              <X size={16} />
+            </button>
+          </div>
+          <nav className="nav-list" aria-label="鋒兄模組清單">
+            {modulesWithToolConfig.map((item) => (
+              <NavItem key={item.id} item={item} activeId={activeId} onSelect={selectModuleId} />
+            ))}
+          </nav>
+        </div>
+      </div>
     </main>
   );
 }
@@ -1197,6 +1384,54 @@ function NavItem({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/* Theme and density live in the chrome, not in 鋒兄設定 — they are how the
+   console looks, not what it is connected to. */
+function DesignCluster({
+  theme,
+  density,
+  onTheme,
+  onDensity,
+}: {
+  theme: ThemeMode;
+  density: DensityMode;
+  onTheme: (mode: ThemeMode) => void;
+  onDensity: (mode: DensityMode) => void;
+}) {
+  const themes: { mode: ThemeMode; label: string; icon: JSX.Element }[] = [
+    { mode: "light", label: "亮色", icon: <Sun size={15} /> },
+    { mode: "dark", label: "暗色", icon: <Moon size={15} /> },
+    { mode: "system", label: "跟隨系統", icon: <Monitor size={15} /> },
+  ];
+  const compact = density === "compact";
+  return (
+    <div className="design-cluster" role="group" aria-label="外觀">
+      {themes.map((item) => (
+        <button
+          key={item.mode}
+          type="button"
+          className={theme === item.mode ? "active" : ""}
+          aria-label={item.label}
+          aria-pressed={theme === item.mode}
+          title={item.label}
+          onClick={() => onTheme(item.mode)}
+        >
+          {item.icon}
+        </button>
+      ))}
+      <button
+        type="button"
+        className={compact ? "active" : ""}
+        aria-label={compact ? "切換為寬鬆密度" : "切換為緊湊密度"}
+        aria-pressed={compact}
+        title={compact ? "緊湊密度" : "寬鬆密度"}
+        onClick={() => onDensity(compact ? "comfortable" : "compact")}
+      >
+        {compact ? <Rows4 size={15} /> : <Rows2 size={15} />}
+      </button>
     </div>
   );
 }
