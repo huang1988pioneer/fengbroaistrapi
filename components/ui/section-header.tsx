@@ -107,9 +107,7 @@ export function PageTitle({
   return (
     <div className={cn("space-y-3", className)}>
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-xs uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
-          Console View
-        </p>
+
         {badge}
       </div>
       <h1 className="font-display text-3xl font-semibold tracking-tight text-[var(--foreground)] sm:text-4xl">

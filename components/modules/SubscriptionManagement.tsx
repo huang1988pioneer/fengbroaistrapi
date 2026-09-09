@@ -371,11 +371,11 @@ function SubscriptionFormCard({
   };
 
   return (
-    <DataCard className={`p-4 sm:p-5 ${toneClass}`}>
+    <DataCard className={`subscription-editor p-4 sm:p-5 ${toneClass}`}>
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{title}</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">只保留目前 subscription 表長期使用的 8 個欄位。</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">填寫服務與扣款資訊，建立後即可在下方追蹤。</p>
         </div>
         <div className="w-full rounded-2xl border border-white/70 bg-white/80 px-4 py-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900/50 lg:w-auto lg:min-w-[220px]">
           <div className="text-xs text-gray-500 dark:text-gray-400">AI 提示</div>

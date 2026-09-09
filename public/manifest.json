@@ -1,12 +1,12 @@
 {
-  "name": "鋒兄AI Appwrite",
-  "short_name": "鋒兄AI Appwrite",
+  "name": "鋒兄AI Strapi",
+  "short_name": "鋒兄AI Strapi",
   "description": "鋒兄AI Appwrite - 食品庫存、訂閱管理系統",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#faf9f5",
-  "theme_color": "#faf9f5",
+  "background_color": "#eef3f8",
+  "theme_color": "#101e33",
   "orientation": "portrait-primary",
   "id": "/",
   "icons": [
@@ -34,7 +34,10 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["productivity", "utilities"],
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
   "lang": "zh-TW",
   "dir": "ltr",
   "launch_handler": {

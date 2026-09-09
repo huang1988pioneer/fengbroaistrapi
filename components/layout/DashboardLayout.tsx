@@ -118,7 +118,7 @@ export default function DashboardLayout({
   );
 
   useEffect(() => {
-    document.title = activeLabel === "首頁" ? "鋒兄AI Appwrite" : `${activeLabel} · 鋒兄AI Appwrite`;
+    document.title = activeLabel === "首頁" ? "鋒兄AI Strapi" : `${activeLabel} · 鋒兄AI Strapi`;
   }, [activeLabel]);
 
   const leafItems = useMemo(() => flattenLeafMenuItems(menuItems), [menuItems]);
@@ -180,7 +180,7 @@ export default function DashboardLayout({
   );
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+    <div className="strapi-workspace min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <AmbientBackdrop />
 
       <div className="relative z-10 flex min-h-screen">
@@ -239,7 +239,7 @@ export default function DashboardLayout({
                   <BirthdayEasterEgg inline />
                 </div>
               )}
-              <div className="surface-panel pad-panel rounded-2xl md:rounded-[20px] xl:rounded-[22px]">
+              <div className="workspace-content">
                 {currentModule !== "subscription" ? (
                   <div className="mb-5 flex flex-col gap-3 border-b border-[var(--line-soft)] pb-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
@@ -641,10 +641,10 @@ function DesignModeCluster() {
       <DensityToggleCompact />
       <div className="hidden min-w-0 pr-1.5 leading-none xl:block">
         <p className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-          Design Mode
+          顯示設定
         </p>
         <p className="text-xs font-medium leading-tight text-[var(--foreground)]">
-          Impeccable 2026~2027
+          STRAPI WORKSPACE
         </p>
       </div>
     </div>
@@ -659,7 +659,7 @@ function BrandBlock({
   title?: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 items-center gap-2", compact && "shrink-0")}>
+    <div className={cn("workspace-brand flex min-w-0 items-center gap-2", compact && "shrink-0")}>
       <div
         className={cn(
           "flex shrink-0 items-center justify-center bg-[linear-gradient(145deg,var(--accent-strong),var(--accent))] text-[var(--accent-foreground)]",
@@ -679,7 +679,7 @@ function BrandBlock({
               : "truncate text-xs font-medium tracking-[0.16em]"
           )}
         >
-          FengBro
+          鋒兄AI Strapi
         </p>
         {compact ? null : (
           <h1 className="truncate text-lg font-semibold leading-6 tracking-tight text-[var(--foreground)]">
@@ -695,14 +695,7 @@ function BrandBlock({
 // Ambient backdrop
 // ─────────────────────────────────────────────
 
-function AmbientBackdrop() {
-  return (
-    <>
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217,119,87,0.10),transparent_34%),radial-gradient(circle_at_88%_8%,rgba(217,119,87,0.06),transparent_26%),linear-gradient(180deg,rgba(250,249,245,0.96),rgba(243,241,235,0.96))] dark:bg-[radial-gradient(circle_at_top_left,rgba(217,119,87,0.10),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(217,119,87,0.05),transparent_24%),linear-gradient(180deg,rgba(38,38,36,0.97),rgba(30,30,29,0.98))]" />
-      <div className="pointer-events-none fixed inset-x-0 top-0 h-48 bg-[linear-gradient(180deg,rgba(255,255,255,0.42),transparent)] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.03),transparent)]" />
-    </>
-  );
-}
+function AmbientBackdrop() { return null; }
 
 // ─────────────────────────────────────────────
 // Mobile Header

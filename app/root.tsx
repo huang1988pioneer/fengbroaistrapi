@@ -8,10 +8,12 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 import stylesheet from "./styles.css?url";
+import workspaceStylesheet from "./workspace.css?url";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: stylesheet },
+  { rel: "stylesheet", href: workspaceStylesheet },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
   {
@@ -21,10 +23,10 @@ export const links: LinksFunction = () => [
 ];
 
 export const meta: MetaFunction = () => [
-  { title: "鋒兄資料庫 Remix CRUD" },
+  { title: "鋒兄AI Strapi" },
   {
     name: "description",
-    content: "鋒兄資料庫 Remix CRUD with CSV import and export.",
+    content: "鋒兄AI Strapi with CSV import and export.",
   },
 ];
 
@@ -62,7 +64,7 @@ export function Layout({ children }: { children: ReactNode }) {
 export function HydrateFallback() {
   return (
     <main className="app-loading" aria-labelledby="loading-title">
-      <h1 id="loading-title">鋒兄資料庫</h1>
+      <h1 id="loading-title">鋒兄AI Strapi</h1>
       <p role="status">正在載入操作介面，請稍候…</p>
       <noscript>請啟用 JavaScript，才能使用資料庫功能。</noscript>
     </main>
