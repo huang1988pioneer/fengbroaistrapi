@@ -28,6 +28,18 @@ export const meta: MetaFunction = () => [
   },
 ];
 
+/* Stamp the saved chrome preferences before first paint. SPA mode shows
+   HydrateFallback first, so without this the console flashes light and
+   comfortable before the provider restores the real choice. Migrate the old SPA keys. */
+const themeBootScript = `try{
+  var t = localStorage.getItem("ui-theme") || localStorage.getItem("fengbro-remix-crud:theme") || "system";
+  if (["light","dark","system"].includes(t)) localStorage.setItem("ui-theme",t);
+  document.documentElement.classList.add(t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light");
+  var d = localStorage.getItem("ui-density") || localStorage.getItem("fengbro-remix-crud:density");
+  localStorage.setItem("ui-density", d === "compact" ? "compact" : "comfortable");
+  document.documentElement.setAttribute("data-density", d === "compact" ? "compact" : "comfortable");
+}catch(e){}`;
+
 export function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="zh-Hant-TW">
@@ -36,6 +48,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body>
         {children}
