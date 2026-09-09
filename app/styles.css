@@ -939,6 +939,185 @@ a {
   line-height: 1.2;
 }
 
+/* ---------------------------------------------- chips + reminders */
+
+.recent-search-row,
+.filter-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.recent-search-label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.recent-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.recent-chip.active {
+  border-color: var(--accent);
+}
+
+.recent-chip button {
+  border: 0;
+  background: transparent;
+  padding: 4px 6px 4px 11px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.recent-chip button + button {
+  display: grid;
+  place-items: center;
+  padding: 4px 9px 4px 4px;
+  color: var(--muted);
+}
+
+.recent-chip button + button:hover {
+  color: var(--danger);
+}
+
+.recent-clear {
+  border: 0;
+  background: transparent;
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.filter-chip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  padding: 6px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--duration-moderate) var(--ease-out),
+    background-color var(--duration-moderate) var(--ease-out),
+    color var(--duration-moderate) var(--ease-out);
+}
+
+.filter-chip:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.filter-chip.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.duplicate-panel {
+  border: 1px solid color-mix(in oklab, var(--warning) 34%, var(--line-soft));
+  border-radius: var(--radius-2xl);
+  background: color-mix(in oklab, var(--warning) 9%, var(--panel));
+  overflow: hidden;
+}
+
+.duplicate-head {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 12px var(--pad-panel);
+  color: var(--text);
+  text-align: left;
+}
+
+.duplicate-head strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.duplicate-count {
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--warning) 24%, transparent);
+  padding: 2px 10px;
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.duplicate-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line-soft);
+  padding: 12px var(--pad-panel);
+}
+
+.duplicate-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.duplicate-group > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.duplicate-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.duplicate-items button {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  padding: 3px 11px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.duplicate-items button:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.date-shift-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.date-shift-row button {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  padding: 2px 9px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.date-shift-row button:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
 /* ---------------------------------------------- table + editor */
 
 /* 快速新增在上、列表在下，兩者都是整寬 — 跟 fengbroaiappwrite 一樣是

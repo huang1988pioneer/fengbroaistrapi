@@ -105,6 +105,19 @@ function savedTheme(): ThemeMode {
   return saved === "light" || saved === "dark" || saved === "system" ? saved : "system";
 }
 
+const recentSearchStorageKey = `${storagePrefix}:recent-searches`;
+const recentSearchLimit = 8;
+
+function loadRecentSearches(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(recentSearchStorageKey) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string").slice(0, recentSearchLimit) : [];
+  } catch {
+    return [];
+  }
+}
+
 function savedDensity(): DensityMode {
   if (typeof window === "undefined") return "comfortable";
   const saved = window.localStorage.getItem(densityStorageKey);
@@ -480,6 +493,60 @@ const musicFields: FieldDef[] = [
 
 /* 管理類欄位比照 fengbroaiappwrite 的 MANAGEMENT_TABLE_SCHEMAS，
    前六個欄位排在最前面，因為表格只顯示前六欄。 */
+type SubscriptionFilter = "all" | "expired" | "due-soon" | "no-date" | "stopped" | "duplicate";
+
+/* 到期天數與 fengbroaiappwrite 的 getDaysFromToday 一致：兩端都歸零到當天
+   午夜再相減，所以「今天扣款」是 0 而不是負數。 */
+function daysFromToday(value: unknown): number {
+  const raw = String(value ?? "").trim();
+  if (!raw) return Number.POSITIVE_INFINITY;
+  const target = new Date(raw);
+  if (Number.isNaN(target.getTime())) return Number.POSITIVE_INFINITY;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+function normalizeKeyPart(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+/* 同名 + 同帳號（沒帳號就用網站）視為重複，跟參考站的分組鍵一樣。 */
+function findDuplicateGroups(records: ItemRecord[]): ItemRecord[][] {
+  const groups = new Map<string, ItemRecord[]>();
+  records.forEach((record) => {
+    const name = normalizeKeyPart(record.name);
+    if (!name) return;
+    const key = `${name}::${normalizeKeyPart(record.account) || normalizeKeyPart(record.site)}`;
+    groups.set(key, [...(groups.get(key) ?? []), record]);
+  });
+  return Array.from(groups.values())
+    .filter((group) => group.length > 1)
+    .sort((left, right) => right.length - left.length);
+}
+
+/* 日期加減走 UTC 曆算，避免時區把結果推掉一天：空欄位用本地的今天當基準
+   （使用者看到的今天），已填的日期則照它自己的意思解讀。 */
+function shiftDateByDays(value: unknown, offsetDays: number) {
+  const raw = String(value ?? "").trim();
+  let base: string;
+  if (!raw) {
+    const now = new Date();
+    base = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    base = raw;
+  } else {
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return raw;
+    base = parsed.toISOString().slice(0, 10);
+  }
+  const [year, month, day] = base.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + offsetDays)).toISOString().slice(0, 10);
+}
+
+const dateShiftOffsets = [-15, 15, -28, 28, -30, 30];
+
 const trialPurchaseFields: FieldDef[] = [
   { key: "name", label: "名稱", required: true },
   { key: "eventDate", label: "日期", type: "datetime" },
@@ -739,6 +806,9 @@ export default function Index() {
   const [recordsByModule, setRecordsByModule] = useState<Record<string, ItemRecord[]>>({});
   const [settings, setSettings] = useState<ItemRecord>(() => getDefaultSettingsRecord());
   const [search, setSearch] = useState("");
+  const [subFilter, setSubFilter] = useState<SubscriptionFilter>("all");
+  const [recentSearches, setRecentSearches] = useState<string[]>(loadRecentSearches);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string | number | boolean>>({});
   const [loading, setLoading] = useState(false);
@@ -781,19 +851,64 @@ export default function Index() {
     setEditingId(null);
     setDraft(activeModule.id === "settings" ? settingsToDraft(settings) : getEmptyDraft(activeModule));
     setSearch("");
+    setSubFilter("all");
     if (activeModule.id !== "settings") void loadRecords(activeModule);
   }, [activeModule.id, settings.strapiUrl, settings.apiToken]);
 
+  useEffect(() => {
+    window.localStorage.setItem(recentSearchStorageKey, JSON.stringify(recentSearches));
+  }, [recentSearches]);
+
+  function rememberSearch(term: string) {
+    const trimmed = term.trim();
+    if (!trimmed) return;
+    setRecentSearches((prev) => [trimmed, ...prev.filter((item) => item !== trimmed)].slice(0, recentSearchLimit));
+  }
+
   const records = activeModule.id === "settings" ? [settings] : recordsByModule[activeModule.id] ?? [];
+
+  /* 訂閱的到期分群，比照 fengbroaiappwrite 的 expired / dueSoon / noDate /
+     stopped / duplicate 五組。 */
+  const subscriptionBuckets = useMemo(() => {
+    if (activeModule.id !== "subscription") return null;
+    const duplicateIds = new Set(
+      findDuplicateGroups(records).flat().map((record) => record.id),
+    );
+    return {
+      expired: records.filter((record) => daysFromToday(record.nextdate) < 0),
+      dueSoon: records.filter((record) => {
+        const days = daysFromToday(record.nextdate);
+        return days >= 0 && days <= 7;
+      }),
+      noDate: records.filter((record) => !String(record.nextdate ?? "").trim()),
+      stopped: records.filter((record) => record.continue === false || record.continue === "false"),
+      duplicate: records.filter((record) => duplicateIds.has(record.id)),
+    };
+  }, [activeModule.id, records]);
+
+  const duplicateGroups = useMemo(
+    () => (activeModule.id === "subscription" ? findDuplicateGroups(records) : []),
+    [activeModule.id, records],
+  );
+
+  const scopedRecords = useMemo(() => {
+    if (!subscriptionBuckets || subFilter === "all") return records;
+    if (subFilter === "expired") return subscriptionBuckets.expired;
+    if (subFilter === "due-soon") return subscriptionBuckets.dueSoon;
+    if (subFilter === "no-date") return subscriptionBuckets.noDate;
+    if (subFilter === "stopped") return subscriptionBuckets.stopped;
+    return subscriptionBuckets.duplicate;
+  }, [records, subFilter, subscriptionBuckets]);
+
   const visibleRecords = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return records;
-    return records.filter((record) =>
+    if (!query) return scopedRecords;
+    return scopedRecords.filter((record) =>
       activeModule.fields.some((field) =>
         String(record[field.key] ?? "").toLowerCase().includes(query),
       ),
     );
-  }, [activeModule.fields, records, search]);
+  }, [activeModule.fields, scopedRecords, search]);
 
   const stats = useMemo(() => {
     const total = records.length;
@@ -1177,6 +1292,77 @@ export default function Index() {
             <LiveToolWorkspaceReplica moduleId={activeModule.id} draft={draft} records={records} setActiveId={setActiveId} setDraft={setDraft} setToast={setToast} />
           ) : null}
 
+          {recentSearches.length ? (
+            <div className="recent-search-row">
+              <span className="recent-search-label">最近搜尋</span>
+              {recentSearches.map((term) => (
+                <span key={term} className={search === term ? "recent-chip active" : "recent-chip"}>
+                  <button type="button" onClick={() => setSearch(term)}>{term}</button>
+                  <button
+                    type="button"
+                    aria-label={`移除 ${term}`}
+                    onClick={() => setRecentSearches((prev) => prev.filter((item) => item !== term))}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+              <button type="button" className="recent-clear" onClick={() => setRecentSearches([])}>
+                清除
+              </button>
+            </div>
+          ) : null}
+
+          {subscriptionBuckets ? (
+            <div className="filter-chip-row" role="group" aria-label="訂閱篩選">
+              {([
+                ["all", "全部", records.length],
+                ["expired", "已過期", subscriptionBuckets.expired.length],
+                ["due-soon", "7 天內", subscriptionBuckets.dueSoon.length],
+                ["no-date", "未設定扣款日", subscriptionBuckets.noDate.length],
+                ["stopped", "不續訂", subscriptionBuckets.stopped.length],
+                ["duplicate", "重複提醒", subscriptionBuckets.duplicate.length],
+              ] as [SubscriptionFilter, string, number][]).map(([id, label, count]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={subFilter === id ? "filter-chip active" : "filter-chip"}
+                  aria-pressed={subFilter === id}
+                  onClick={() => setSubFilter(id)}
+                >
+                  {label}{id === "all" ? "" : ` (${count})`}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {duplicateGroups.length ? (
+            <section className="duplicate-panel">
+              <button type="button" className="duplicate-head" aria-expanded={duplicatesOpen} onClick={() => setDuplicatesOpen((open) => !open)}>
+                <ChevronDown className={duplicatesOpen ? "chevron open" : "chevron"} size={16} />
+                <strong>重複訂閱提醒</strong>
+                <span className="duplicate-count">{duplicateGroups.length} 組</span>
+              </button>
+              {duplicatesOpen ? (
+                <div className="duplicate-body">
+                  {duplicateGroups.map((group) => (
+                    <div key={group[0].id} className="duplicate-group">
+                      <strong>{String(group[0].name ?? "")}</strong>
+                      <span>{group.length} 筆</span>
+                      <div className="duplicate-items">
+                        {group.map((record) => (
+                          <button key={record.id} type="button" onClick={() => editRecord(record)}>
+                            {String(record.account || record.site || record.id)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
           <section className="content-grid">
             <aside className="editor-panel">
               <div className="editor-head">
@@ -1199,6 +1385,21 @@ export default function Index() {
                       value={draft[field.key] ?? ""}
                       onChange={(value) => setDraft((prev) => ({ ...prev, [field.key]: value }))}
                     />
+                    {activeModule.id === "subscription" && field.key === "nextdate" ? (
+                      <div className="date-shift-row">
+                        {dateShiftOffsets.map((offset) => (
+                          <button
+                            key={offset}
+                            type="button"
+                            onClick={() =>
+                              setDraft((prev) => ({ ...prev, nextdate: shiftDateByDays(prev.nextdate, offset) }))
+                            }
+                          >
+                            {offset > 0 ? `+${offset}` : offset} 天
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </label>
                 ))}
               </div>
@@ -1282,6 +1483,10 @@ export default function Index() {
                   <input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
+                    onBlur={(event) => rememberSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") rememberSearch(search);
+                    }}
                     placeholder={`搜尋 ${activeModule.label}`}
                   />
                 </label>
