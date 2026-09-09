@@ -5,7 +5,7 @@
 
 ## 功能
 
-- 鋒兄訂閱、食品、筆記、常用、圖片、影片、音樂、文件、播客、銀行、例行、工具、設定、關於。
+- 鋒兄訂閱、試用首購、鋒兄重灌、鋒兄額度、食品、購物清單、筆記、常用、圖片、影片、音樂、文件、播客、銀行、例行、工具、設定、關於。
 - 每個資料模組支援 CRUD、CSV 匯入、CSV 匯出。
 - 圖片、影片、音樂、文件、播客支援 Strapi Media Library 上傳後建立資料。
 - 鋒兄設定極簡化，只需要 Strapi URL 與 Strapi API Token。
@@ -66,7 +66,11 @@ npm run preview
 目前前端預期的 Strapi REST API：
 
 - `/api/subscriptions`
+- `/api/trial-purchases`
+- `/api/reinstalls`
+- `/api/quotas`
 - `/api/foods`
+- `/api/shopping-lists`
 - `/api/articles`
 - `/api/commonaccounts`
 - `/api/images`

@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
+  BadgePercent,
   Banknote,
   BookOpenText,
   Boxes,
@@ -12,8 +13,10 @@ import {
   FileText,
   Film,
   FolderHeart,
+  Gauge,
   Image,
   Info,
+  Laptop,
   LayoutGrid,
   Menu,
   Monitor,
@@ -27,6 +30,7 @@ import {
   Rows4,
   Search,
   Settings,
+  ShoppingCart,
   Sun,
   Trash2,
   Upload,
@@ -474,8 +478,77 @@ const musicFields: FieldDef[] = [
   { key: "language", label: "語言" },
 ];
 
+/* 管理類欄位比照 fengbroaiappwrite 的 MANAGEMENT_TABLE_SCHEMAS，
+   前六個欄位排在最前面，因為表格只顯示前六欄。 */
+const trialPurchaseFields: FieldDef[] = [
+  { key: "name", label: "名稱", required: true },
+  { key: "eventDate", label: "日期", type: "datetime" },
+  { key: "firstPurchasePrice", label: "首購價", type: "number" },
+  { key: "regularPrice", label: "原價", type: "number" },
+  { key: "trialStatus", label: "試用狀態", placeholder: "試用中 / 已結束 / 無試用" },
+  { key: "purchaseStatus", label: "首購狀態", placeholder: "未購買 / 已首購 / 已續購" },
+  { key: "account", label: "帳號" },
+  { key: "note", label: "備註", type: "textarea" },
+];
+
+const reinstallFields: FieldDef[] = [
+  { key: "name", label: "名稱", required: true },
+  { key: "category", label: "分類" },
+  { key: "system", label: "系統", placeholder: "Windows / macOS" },
+  { key: "softwareType", label: "軟體類型" },
+  { key: "licenseType", label: "授權類型" },
+  { key: "site", label: "網站", type: "url" },
+  { key: "serial", label: "序號" },
+  { key: "viewPassword", label: "檢視密碼" },
+  { key: "subscriptionSoftware", label: "訂閱制", type: "boolean" },
+  { key: "subscriptionPeriod", label: "訂閱週期" },
+  { key: "subscriptionPrice", label: "訂閱價格", type: "number" },
+  { key: "subscriptionCurrency", label: "訂閱幣別", placeholder: "TWD" },
+  { key: "note", label: "備註", type: "textarea" },
+];
+
+const quotaFields: FieldDef[] = [
+  { key: "name", label: "名稱", required: true },
+  { key: "serviceType", label: "服務類型" },
+  { key: "account", label: "帳號" },
+  { key: "quotaRemaining", label: "剩餘額度", type: "number" },
+  { key: "quotaPoints", label: "點數", type: "number" },
+  { key: "quotaExpiry", label: "額度到期", type: "datetime" },
+  { key: "quotaRatio", label: "額度比例", type: "number" },
+  { key: "litmediaAccount", label: "LitMedia 帳號槽" },
+  { key: "pointsSyncedAt", label: "點數量測時間", type: "datetime" },
+  { key: "usageSyncedAt", label: "用量量測時間", type: "datetime" },
+  { key: "ratio5h", label: "5 小時比例", type: "number" },
+  { key: "expiry5h", label: "5 小時重置" },
+  { key: "ratioWeek", label: "一週比例", type: "number" },
+  { key: "expiryWeek", label: "一週重置" },
+  { key: "ratioMonth", label: "一月比例", type: "number" },
+  { key: "expiryMonth", label: "一月重置" },
+  { key: "resetCreditsBalance", label: "重置點數餘額", type: "number" },
+  { key: "resetCreditsExpiry", label: "重置點數到期" },
+  { key: "note", label: "備註", type: "textarea" },
+  { key: "accessToken", label: "Access Token", type: "textarea" },
+];
+
+const shoppingListFields: FieldDef[] = [
+  { key: "name", label: "名稱", required: true },
+  { key: "plannedDate", label: "預計日期", type: "datetime" },
+  { key: "price", label: "價格", type: "number" },
+  { key: "quantity", label: "數量", type: "number" },
+  { key: "shop", label: "商店" },
+  { key: "pickupMethod", label: "取貨方式", placeholder: "宅配 / 超商 / 自取" },
+  { key: "currency", label: "幣別", placeholder: "TWD" },
+  { key: "imageUrl", label: "圖片 URL", type: "url" },
+  { key: "account", label: "帳號" },
+  { key: "note", label: "備註", type: "textarea" },
+];
+
+/* 模組順序比照 fengbroaiappwrite 的鋒兄管理選單。 */
 const modules: ModuleDef[] = [
   { id: "subscription", label: "鋒兄訂閱", subtitle: "續訂、扣款與提醒", icon: <Archive />, fields: subscriptionFields, apiPath: "subscriptions", seedCsv: subscriptionCsv },
+  { id: "trial-purchase", label: "試用首購", subtitle: "試用與首購狀態", icon: <BadgePercent />, fields: trialPurchaseFields, apiPath: "trial-purchases" },
+  { id: "reinstall", label: "鋒兄重灌", subtitle: "軟體授權與序號", icon: <Laptop />, fields: reinstallFields, apiPath: "reinstalls" },
+  { id: "quota", label: "鋒兄額度", subtitle: "服務額度與點數", icon: <Gauge />, fields: quotaFields, apiPath: "quotas" },
   {
     id: "food",
     label: "鋒兄食品",
@@ -493,6 +566,7 @@ const modules: ModuleDef[] = [
       { key: "photohash", label: "照片 Hash" },
     ],
   },
+  { id: "shopping-list", label: "購物清單", subtitle: "待買品項與取貨", icon: <ShoppingCart />, fields: shoppingListFields, apiPath: "shopping-lists" },
   {
     id: "article",
     label: "鋒兄筆記",
