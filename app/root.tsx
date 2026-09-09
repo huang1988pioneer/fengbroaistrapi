@@ -27,6 +27,17 @@ export const meta: MetaFunction = () => [
   },
 ];
 
+/* Stamp the saved chrome preferences before first paint. SPA mode shows
+   HydrateFallback first, so without this the console flashes light and
+   comfortable before the route restores the real choice. Keys must match
+   `storagePrefix` in routes/_index.tsx. */
+const themeBootScript = `try{
+  var t = localStorage.getItem("fengbro-remix-crud:theme");
+  if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  var d = localStorage.getItem("fengbro-remix-crud:density");
+  document.documentElement.setAttribute("data-density", d === "compact" ? "compact" : "comfortable");
+}catch(e){}`;
+
 export function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="zh-Hant-TW">
@@ -35,6 +46,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body>
         {children}

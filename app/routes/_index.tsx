@@ -91,6 +91,21 @@ const storagePrefix = "fengbro-remix-crud";
 const settingsStorageKey = `${storagePrefix}:settings`;
 const themeStorageKey = `${storagePrefix}:theme`;
 const densityStorageKey = `${storagePrefix}:density`;
+
+/* Read straight into useState. Restoring in an effect instead would let the
+   apply-effect write the default back over the saved choice before the
+   restored state ever commits. */
+function savedTheme(): ThemeMode {
+  if (typeof window === "undefined") return "system";
+  const saved = window.localStorage.getItem(themeStorageKey);
+  return saved === "light" || saved === "dark" || saved === "system" ? saved : "system";
+}
+
+function savedDensity(): DensityMode {
+  if (typeof window === "undefined") return "comfortable";
+  const saved = window.localStorage.getItem(densityStorageKey);
+  return saved === "compact" ? "compact" : "comfortable";
+}
 const fallbackStrapiUrl = "https://site--strapigoldshoot0720--p9rc2b8grv9b.code.run";
 const defaultStrapiUrl = import.meta.env.VITE_STRAPI_URL || fallbackStrapiUrl;
 const defaultStrapiApiToken = import.meta.env.VITE_STRAPI_API_TOKEN || "";
@@ -655,8 +670,8 @@ export default function Index() {
   const [loading, setLoading] = useState(false);
   const [importProgress, setImportProgress] = useState<{ label: string; current: number; total: number } | null>(null);
   const [toast, setToast] = useState("已準備 Remix CRUD 工作台");
-  const [theme, setTheme] = useState<ThemeMode>("system");
-  const [density, setDensity] = useState<DensityMode>("comfortable");
+  const [theme, setTheme] = useState<ThemeMode>(savedTheme);
+  const [density, setDensity] = useState<DensityMode>(savedDensity);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const activeParent = modulesWithToolConfig.find((item) => isBranchActive(item, activeId));
 
@@ -665,13 +680,6 @@ export default function Index() {
     if (saved) {
       setSettings({ ...getDefaultSettingsRecord(), ...(JSON.parse(saved) as ItemRecord) });
     }
-  }, []);
-
-  useEffect(() => {
-    const savedTheme = window.localStorage.getItem(themeStorageKey);
-    if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "system") setTheme(savedTheme);
-    const savedDensity = window.localStorage.getItem(densityStorageKey);
-    if (savedDensity === "comfortable" || savedDensity === "compact") setDensity(savedDensity);
   }, []);
 
   useEffect(() => {
