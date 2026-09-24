@@ -19,7 +19,13 @@ export function toRecord(entry: Row, model?: string): Row {
   if (model === 'image') result.cover = Boolean(row.cover && row.cover !== 'false');
   return result;
 }
-export function toPayload(body: Row, model: string): Row {
+// 舊的 bank schema 沒有這些欄位；新增時空值就不送，免得整筆被 Strapi 擋下。編輯時仍送空值以便清空。
+const OPTIONAL_ON_CREATE: Record<string, string[]> = { bank: ['note','category','expiry'] };
+export function toPayload(body: Row, model: string, mode: 'create' | 'update' = 'update'): Row {
+  if (mode === 'create' && OPTIONAL_ON_CREATE[model]) {
+    body = { ...body };
+    for (const key of OPTIONAL_ON_CREATE[model]) if (body[key] === '' || body[key] === null) delete body[key];
+  }
   const builders: Record<string, (body: Row, mode: 'create' | 'update') => Row> = {trialpurchase:buildTrialPurchaseWritePayload,reinstall:buildReinstallSoftwareWritePayload,quota:buildQuotaWritePayload,shoppinglist:buildShoppingItemWritePayload,tubechannel:buildFengbroTubeChannelWritePayload,financeinstrument2:buildFinanceInstrumentWritePayload};
   if(builders[model])body=builders[model](body,'update');
   const data: Row = {};
@@ -44,6 +50,14 @@ export function toPayload(body: Row, model: string): Row {
   return data;
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+// Strapi 遇到 schema 沒有的欄位只回 Invalid key，補一句下一步該做什麼。
+export function withMissingFieldHint(message: string | undefined, path: string): string | undefined {
+  const match = /Invalid key "?([\w.]+)"?/.exec(message || '');
+  if (!match) return message;
+  const collection = path.split(/[/?]/)[0];
+  const model = Object.entries(models).find(([, m]) => m.path === collection)?.[0] || collection;
+  return `${model} 資料表還沒有「${match[1]}」欄位，請部署 strapi-extension 的 ${model} schema 並重新啟動 Strapi 後再試。（${message}）`;
+}
 export async function strapiRequest(path: string, init: RequestInit = {}): Promise<any> {
   const config = getConnection();
   const headers = new Headers(init.headers);
@@ -52,7 +66,7 @@ export async function strapiRequest(path: string, init: RequestInit = {}): Promi
   const response = await fetch(`${validateBaseUrl(config.url)}/api/${path}`, { ...init, headers });
   if (response.status === 204) return null;
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw Object.assign(new Error(payload?.error?.message || `Strapi ${response.status}：${response.status === 403 ? '請確認 API Token 與資料表權限' : '服務暫時無法使用'}`), { status: response.status });
+  if (!response.ok) throw Object.assign(new Error(withMissingFieldHint(payload?.error?.message, path) || `Strapi ${response.status}：${response.status === 403 ? '請確認 API Token 與資料表權限' : '服務暫時無法使用'}`), { status: response.status });
   return payload;
 }
 export async function listRecords(model: string, signal?: AbortSignal | null): Promise<Row[]> {
@@ -101,7 +115,7 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
         return json(await listRecords(modelKey, signal));
       }
       if (method === 'DELETE') { await strapiRequest(endpoint,{method,signal}); return json({success:true}); }
-      const payload = toPayload(body, modelKey);
+      const payload = toPayload(body, modelKey, method === 'POST' ? 'create' : 'update');
       const result = await strapiRequest(endpoint,{method:method === 'PATCH' ? 'PUT' : method,body:JSON.stringify({data:payload}),signal});
       return json(toRecord(result.data,modelKey), method === 'POST' ? 201 : 200);
     }

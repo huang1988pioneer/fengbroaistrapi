@@ -43,6 +43,15 @@ interface QuotaDoc {
   expiryMonth?: string;
 }
 
+/** 銀行／電子票證／點數表（Appwrite bank） */
+interface BankDoc {
+  $id: string;
+  name: string;
+  deposit?: number;
+  expiry?: string;
+  category?: string;
+}
+
 /** 購物清單表（Appwrite shoppinglist） */
 interface ShoppingDoc {
   $id: string;
@@ -101,6 +110,15 @@ interface ShoppingItemDetail {
   currency?: string;
 }
 
+/** 銀行／票證／點數到期細節（以 expiry 為準） */
+interface BankExpiryDetail {
+  id: string;
+  name: string;
+  daysRemaining: number;
+  expiry: string;
+  category: string;
+}
+
 interface DashboardStats {
   totalFoods: number;
   totalSubscriptions: number;
@@ -120,6 +138,7 @@ interface DashboardStats {
   quotaAccountsExpiring3Days: number;
   quotaAiExpiringTodayOrTomorrow: number;
   shoppingItemsExpiring3Days: number;
+  banksExpiring7Days: number;
   totalMonthlyFee: number;
   totalAnnualFee: number;
   expiredFoods: number;
@@ -134,6 +153,7 @@ interface DashboardStats {
   quotaAccountsExpiring3DaysList: QuotaExpiryDetail[];
   quotaAiExpiringSoonList: QuotaExpiryDetail[];
   shoppingItemsExpiring3DaysList: ShoppingItemDetail[];
+  banksExpiring7DaysList: BankExpiryDetail[];
 }
 
 const DASHBOARD_STATS_TTL_MS = 60_000;
@@ -157,6 +177,7 @@ const EMPTY_STATS: DashboardStats = {
   quotaAccountsExpiring3Days: 0,
   quotaAiExpiringTodayOrTomorrow: 0,
   shoppingItemsExpiring3Days: 0,
+  banksExpiring7Days: 0,
   totalMonthlyFee: 0,
   totalAnnualFee: 0,
   expiredFoods: 0,
@@ -171,6 +192,7 @@ const EMPTY_STATS: DashboardStats = {
   quotaAccountsExpiring3DaysList: [],
   quotaAiExpiringSoonList: [],
   shoppingItemsExpiring3DaysList: [],
+  banksExpiring7DaysList: [],
 };
 
 type TableLoadResult<T> = {
@@ -274,7 +296,8 @@ export function useDashboardStats(includeExtended = true) {
     try {
       // 三個管理模組表（試用/首購、額度、購物清單）以「可選」方式載入：
       // 尚未在鋒兄設定建立 Table 時不阻斷首頁，相關計數維持 0。
-      // 精簡／完整模式都會載入，讓首頁待辦與到期提醒同步。精簡模式才略過文章／常用／銀行／例行等裝飾統計。
+      // 精簡／完整模式都會載入，讓首頁待辦與到期提醒同步。銀行也一起載入（點數／票證
+      // 有到期提醒），精簡模式才略過文章／常用／例行等裝飾統計。
       const [
         foodsResult,
         subsResult,
@@ -294,9 +317,7 @@ export function useDashboardStats(includeExtended = true) {
         includeExtended
           ? loadTable<unknown>("/api/commonaccount", controller.signal)
           : Promise.resolve(emptyTableResult<unknown>()),
-        includeExtended
-          ? loadTable<{ deposit?: number }>("/api/bank", controller.signal)
-          : Promise.resolve(emptyTableResult<{ deposit?: number }>()),
+        loadTable<BankDoc>("/api/bank", controller.signal),
         includeExtended
           ? loadTable<unknown>("/api/routine", controller.signal)
           : Promise.resolve(emptyTableResult<unknown>()),
@@ -312,8 +333,10 @@ export function useDashboardStats(includeExtended = true) {
         subsResult,
         articlesResult,
         accountsResult,
-        banksResult,
         routinesResult,
+        // 銀行在精簡模式也會載入（點數到期提醒），但只有完整儀表會顯示銀行統計，
+        // 所以沒建表時只在完整模式視為錯誤。
+        ...(includeExtended ? [banksResult] : []),
       ]
         .map((r) => r.missingError)
         .filter(Boolean) as string[];
@@ -326,7 +349,7 @@ export function useDashboardStats(includeExtended = true) {
       const subscriptions = subsResult.data;
       const articles = articlesResult.data;
       const commonAccounts = accountsResult.data;
-      const banks = banksResult.data;
+      const banks = banksResult.missingError ? [] : banksResult.data;
       const routines = routinesResult.data;
       const trialPurchases = trialPurchasesResult.missingError ? [] : trialPurchasesResult.data;
       const quotas = quotaResult.missingError ? [] : quotaResult.data;
@@ -478,6 +501,27 @@ export function useDashboardStats(includeExtended = true) {
         })
         .sort((a, b) => a.daysRemaining - b.daysRemaining);
 
+      // 銀行／電子票證／點數：有效期限 7 天內（含當天）進入提醒窗口
+      const banksExpiring7DaysList = banks
+        .filter((doc) => {
+          if (!doc.expiry) return false;
+          const expiry = new Date(doc.expiry);
+          if (Number.isNaN(expiry.getTime())) return false;
+          return expiry <= sevenDaysFromNow && expiry >= today;
+        })
+        .map((doc) => {
+          const expiry = new Date(doc.expiry!);
+          const daysRemaining = Math.ceil((expiry.getTime() - today.getTime()) / dayMs);
+          return {
+            id: doc.$id,
+            name: doc.name,
+            daysRemaining,
+            expiry: doc.expiry!,
+            category: doc.category || "",
+          } satisfies BankExpiryDetail;
+        })
+        .sort((a, b) => a.daysRemaining - b.daysRemaining);
+
       const totalMonthlyFee = subscriptions.reduce(
         (total, sub) => total + convertToTWD(sub.price, sub.currency),
         0
@@ -504,6 +548,7 @@ export function useDashboardStats(includeExtended = true) {
         quotaAccountsExpiring3Days: quotaAccountsExpiring3DaysList.length,
         quotaAiExpiringTodayOrTomorrow: quotaAiExpiringSoonList.length,
         shoppingItemsExpiring3Days: shoppingItemsExpiring3DaysList.length,
+        banksExpiring7Days: banksExpiring7DaysList.length,
         totalMonthlyFee,
         totalAnnualFee,
         expiredFoods: expiredFoodsList.length,
@@ -518,6 +563,7 @@ export function useDashboardStats(includeExtended = true) {
         quotaAccountsExpiring3DaysList,
         quotaAiExpiringSoonList,
         shoppingItemsExpiring3DaysList,
+        banksExpiring7DaysList,
       };
       setStats(nextStats);
       writeSessionCache(dashboardStatsCacheName(includeExtended), nextStats);
@@ -551,7 +597,7 @@ export function useDashboardStats(includeExtended = true) {
   useRefreshKeyListener("shoppinglist_refresh_key", loadStats, refreshEnabled);
   useRefreshKeyListener("articles_refresh_key", loadStats, refreshEnabled && includeExtended);
   useRefreshKeyListener("commonaccount_refresh_key", loadStats, refreshEnabled && includeExtended);
-  useRefreshKeyListener("bank_refresh_key", loadStats, refreshEnabled && includeExtended);
+  useRefreshKeyListener("bank_refresh_key", loadStats, refreshEnabled);
   useRefreshKeyListener("routine_refresh_key", loadStats, refreshEnabled && includeExtended);
 
   return { stats, loading, error, setupRequired };

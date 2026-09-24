@@ -43,13 +43,16 @@ describe("session data cache", () => {
     assert.equal(readSessionCache("stats", 0), null);
   });
 
-  it("scopes keys to the current Appwrite account", () => {
-    globalThis.localStorage.setItem("NEXT_PUBLIC_APPWRITE_PROJECT_ID", "proj-a");
-    globalThis.localStorage.setItem("APPWRITE_DATABASE_ID", "db-a");
-    assert.match(sessionCacheKey("stats"), /proj-a:db-a:stats$/);
+  it("scopes keys to the current Strapi server", () => {
+    const connect = (url) =>
+      globalThis.localStorage.setItem("fengbro-strapi-connection", JSON.stringify({ url }));
+    connect("https://cms-a.example/");
+    assert.match(sessionCacheKey("stats"), /:https:\/\/cms-a\.example:stats$/);
     writeSessionCache("stats", { total: 1 });
-    globalThis.localStorage.setItem("NEXT_PUBLIC_APPWRITE_PROJECT_ID", "proj-b");
+    connect("https://cms-b.example");
     assert.equal(readSessionCache("stats", 60_000), null);
+    connect("https://cms-a.example");
+    assert.deepEqual(readSessionCache("stats", 60_000), { total: 1 });
     clearSessionCache("stats");
   });
 });

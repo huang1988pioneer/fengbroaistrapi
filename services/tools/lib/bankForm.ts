@@ -1,4 +1,10 @@
-import { Bank, BankFormData } from "@/types";
+import type { Bank, BankFormData } from "@/types";
+
+/** Appwrite 存的是 ISO datetime，<input type="date"> 只吃 YYYY-MM-DD。 */
+export function toDateInputValue(value?: string): string {
+  if (!value) return "";
+  return value.slice(0, 10);
+}
 
 export const INITIAL_BANK_FORM: BankFormData = {
   name: "",
@@ -10,6 +16,9 @@ export const INITIAL_BANK_FORM: BankFormData = {
   activity: "",
   card: "",
   account: "",
+  note: "",
+  category: "",
+  expiry: "",
 };
 
 export function bankToFormData(bank: Bank, overrides: Partial<BankFormData> = {}): BankFormData {
@@ -23,6 +32,9 @@ export function bankToFormData(bank: Bank, overrides: Partial<BankFormData> = {}
     activity: bank.activity || "",
     card: bank.card || "",
     account: bank.account || "",
+    note: bank.note || "",
+    category: bank.category || "",
+    expiry: toDateInputValue(bank.expiry),
     ...overrides,
   };
 }

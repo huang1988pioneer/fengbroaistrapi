@@ -48,3 +48,16 @@ test('tool routing removes legacy secrets and auth headers',async()=>{
 test('Strapi v4 and v5 rows expose compatible ids',()=>{
  assert.equal(toRecord({id:1,attributes:{name:'Old'}}).$id,'1');assert.equal(toRecord({id:1,documentId:'new'}).$id,'new');
 });
+test('new bank rows omit empty note, category and expiry so older schemas still accept them',()=>{
+ assert.deepEqual(toPayload({name:'點數',note:'',category:'',expiry:''},'bank','create'),{name:'點數'});
+ assert.deepEqual(toPayload({name:'點數',note:'到期前用完',category:'points',expiry:'2026-10-01T00:00:00.000+08:00'},'bank','create'),{name:'點數',note:'到期前用完',category:'points',expiry:'2026-10-01'});
+});
+test('editing a bank row can clear note, category and expiry',()=>{
+ assert.deepEqual(toPayload({name:'點數',note:'',category:'',expiry:''},'bank','update'),{name:'點數',note:'',category:'',expiry:null});
+});
+test('Strapi invalid key errors point at the schema that needs deploying',async()=>{
+ globalThis.fetch=async()=>new Response(JSON.stringify({error:{message:'Invalid key expiry'}}),{status:400});
+ const result=await apiFetch('/api/bank',{method:'POST',body:JSON.stringify({name:'點數',expiry:'2026-10-01'})});
+ assert.equal(result.status,400);
+ assert.match((await result.json()).error,/bank 資料表還沒有「expiry」欄位.*strapi-extension/);
+});

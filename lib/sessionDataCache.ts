@@ -3,12 +3,13 @@ type SessionCacheEnvelope<T> = {
   data: T;
 };
 
+import { getConnection } from "./strapi/config";
+
+/** 快取依 Strapi 服務網址分開，切換到另一台 Strapi 時不會先畫出別台的資料。 */
 function accountScope(): string {
   if (typeof window === "undefined") return "ssr";
   try {
-    const project = window.localStorage.getItem("NEXT_PUBLIC_APPWRITE_PROJECT_ID") || "";
-    const database = window.localStorage.getItem("APPWRITE_DATABASE_ID") || "";
-    return `${project}:${database}`;
+    return getConnection().url.replace(/\/$/, "");
   } catch {
     return "local";
   }

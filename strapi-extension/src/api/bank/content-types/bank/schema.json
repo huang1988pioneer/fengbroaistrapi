@@ -48,6 +48,15 @@
         "videos",
         "audios"
       ]
+    },
+    "note": {
+      "type": "text"
+    },
+    "category": {
+      "type": "string"
+    },
+    "expiry": {
+      "type": "date"
     }
   }
 }

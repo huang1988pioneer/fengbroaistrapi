@@ -8,6 +8,20 @@
 - `services/tools` 提供獨立 Node.js 工具 API，需另外部署；靜態站無法執行這些伺服器功能。
 - `strapi-extension` 提供後端資料模型，套用前請比對現有模型並備份資料庫。
 
+## 2026-09-24 追上參考專案
+
+已補上 fengbroaiappwrite 在 `ba0d9be` 之後的功能，並改寫成 Strapi 版本：
+
+- 鋒兄銀行分成銀行／電子票證／點數三區塊，可手動指定分類，新增多行備註與有效期限。
+  有效期限七天內在清單上以朱紅倒數標示，並加入儀表板與 Email 到期提醒。
+- 鋒兄Tube 列出超過 3 個月未更新的頻道。
+- 資料讀取加上同 URL 請求合併、session 快取先畫後更新；快取依 Strapi 網址分開。
+- 工具 API 的 Strapi 分頁改為平行 offset 讀取（Strapi 不支援游標分頁）。
+- 參考專案的 Appwrite「補欄位」端點不移植；Strapi 缺欄位時錯誤訊息會提示部署 schema。
+
+**需要部署**：`strapi-extension/src/api/bank` 新增 `note`（text）、`category`（string）、`expiry`（date）。
+未部署前仍可新增不含這三欄的銀行資料；填了就會收到補欄位提示。
+
 ## 工具 API 部署
 
 從儲存庫根目錄執行 `docker build -f services/tools/Dockerfile -t fengbro-tools .`。

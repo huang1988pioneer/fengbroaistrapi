@@ -413,6 +413,7 @@ export interface ApiResponse<T> {
 export interface Bank {
   $id: string;
   name: string;
+  /** 銀行／票證是金額，點數是點數；單位看分類而定。 */
   deposit?: number;
   site?: string;
   address?: string;
@@ -421,6 +422,12 @@ export interface Bank {
   activity?: string;
   card?: string;
   account?: string;
+  /** 自由備註，點數多半用來記有效期限。 */
+  note?: string;
+  /** "bank" | "ticket" | "points"；留空代表沿用關鍵字自動判斷。 */
+  category?: string;
+  /** 有效期限，Appwrite 存 datetime，表單用 YYYY-MM-DD。 */
+  expiry?: string;
   $createdAt: string;
   $updatedAt: string;
 }
@@ -435,6 +442,9 @@ export interface BankFormData {
   activity?: string;
   card?: string;
   account?: string;
+  note?: string;
+  category?: string;
+  expiry?: string;
 }
 
 // 常用帳號類型

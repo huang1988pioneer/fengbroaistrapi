@@ -41,6 +41,24 @@ export async function GET(request) {
 }
 
 // 新增銀行資料
+// Strapi 拒絕 schema 沒有的欄位時，錯誤訊息只寫 Invalid key，
+// 使用者看不出下一步。補一句去哪裡補欄位。
+function withMissingAttributeHint(message) {
+  const match = /Invalid key "?([\w.]+)"?|Unknown attribute: "([^"]+)"/.exec(message || "");
+  if (!match) return message;
+  return `bank 資料表還沒有「${match[1] || match[2]}」欄位，請部署 strapi-extension 的 bank schema 並重新啟動 Strapi 後再試。（${message}）`;
+}
+
+// 表單送來的是 YYYY-MM-DD，Strapi date 欄位直接吃；
+// 若帶了時間就只取日期部分（不經時區換算，免得差一天）。無法解析的字串回傳 null，讓呼叫端擋下來。
+function toStrapiDate(value) {
+  if (!value) return "";
+  const text = String(value);
+  if (Number.isNaN(new Date(text).getTime())) return null;
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(text);
+  return match ? match[1] : new Date(text).toISOString().slice(0, 10);
+}
+
 export async function POST(req) {
   try {
     const body = await req.json();
@@ -55,7 +73,10 @@ export async function POST(req) {
       transfer,
       activity,
       card,
-      account
+      account,
+      note,
+      category,
+      expiry
     } = body;
 
     if (!name) {
@@ -78,6 +99,17 @@ export async function POST(req) {
       account: account || null
     };
 
+    // 舊的 bank 資料表沒有 note / category / expiry 欄位，空值就不要送，
+    // 免得整筆新增被擋下。
+    if (note) payload.note = note;
+    if (category) payload.category = category;
+
+    const formattedExpiry = toStrapiDate(expiry);
+    if (formattedExpiry === null) {
+      return NextResponse.json({ error: `Invalid date format: ${expiry}` }, { status: 400 });
+    }
+    if (formattedExpiry) payload.expiry = formattedExpiry;
+
     const res = await databases.createDocument(
       databaseId,
       collectionId,
@@ -89,6 +121,6 @@ export async function POST(req) {
   } catch (err) {
     console.error("POST /bank error:", err);
     const message = err instanceof Error ? err.message : "Create failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: withMissingAttributeHint(message) }, { status: 500 });
   }
 }
